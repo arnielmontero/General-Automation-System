@@ -22,6 +22,7 @@ MODULES = [
     Module("mo_close.mark_done", "Mark done", "Tick MO / transfer rows as done (system checks Odoo)", "MO's To Be Close"),
     Module("mo_close.confirm", "Final confirmation", "Checker / Supervisor final confirmation of rows", "MO's To Be Close"),
     Module("mo_close.progress", "Progress", "Progress monitoring of all records", "MO's To Be Close"),
+    Module("mo_close.reports", "Reports", "Reports & charts by date, progress and SO (per day / month / year)", "MO's To Be Close"),
     Module("mo_close.export", "Export reports", "Download Excel / PDF reports", "MO's To Be Close"),
     Module("mo_close.delete", "Delete records", "Permanently delete a record and its tracking", "MO's To Be Close"),
     Module("admin.users", "Users", "Assign roles to users, enable / disable users", "Administration"),

@@ -26,12 +26,13 @@
     </form>
     {% endif %}
 
-    {% if "mo_close.dashboard" in modules or "mo_close.records" in modules or "mo_close.create" in modules or "mo_close.progress" in modules %}
+    {% if "mo_close.dashboard" in modules or "mo_close.records" in modules or "mo_close.create" in modules or "mo_close.progress" in modules or "mo_close.reports" in modules %}
       <div class="nav-section">MO's To Be Close</div>
       {% if "mo_close.dashboard" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'dashboard' %}active{% endif %}" href="{% url 'mo_close:dashboard' %}"><i class="bi bi-grid"></i> Dashboard</a>{% endif %}
       {% if "mo_close.records" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name in 'records,record_detail,record_preview' %}active{% endif %}" href="{% url 'mo_close:records' %}"><i class="bi bi-journal-text"></i> Records</a>{% endif %}
       {% if "mo_close.create" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'record_new' %}active{% endif %}" href="{% url 'mo_close:record_new' %}"><i class="bi bi-file-earmark-arrow-up"></i> New Record</a>{% endif %}
       {% if "mo_close.progress" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'progress' %}active{% endif %}" href="{% url 'mo_close:progress' %}"><i class="bi bi-list-check"></i> Progress</a>{% endif %}
+      {% if "mo_close.reports" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'reports' %}active{% endif %}" href="{% url 'mo_close:reports' %}"><i class="bi bi-bar-chart-line"></i> Reports</a>{% endif %}
     {% endif %}
 
     {% if "admin.users" in modules or "admin.roles" in modules or "admin.logs" in modules %}

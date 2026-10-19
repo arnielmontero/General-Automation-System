@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Case, Count, F, FloatField, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Cast, Coalesce, Lower
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -13,7 +14,7 @@ from core.models import AuditLog
 from core.odoo import OdooError, OdooSessionExpired, client_for
 from core.permissions import module_required
 
-from . import exports, services
+from . import exports, report_exports, reports, services
 from .forms import NewRecordForm
 from .models import SYSTEM, MORecord, PackingList, TransferRecord, norm_code
 from .pdf_parser import PackingListParseError, parse_packing_list
@@ -309,6 +310,29 @@ def record_progress_badge(request, pk):
 # --- Progress (Step 3 monitoring) -----------------------------------------------------------------
 
 
+def _row_count(model, record_field, **filters):
+    """Subquery: number of MO / transfer rows of each record."""
+    sub = (
+        model.objects.filter(**{record_field: OuterRef("pk")}, **filters)
+        .order_by()
+        .values(record_field)
+        .annotate(c=Count("id"))
+        .values("c")
+    )
+    return Coalesce(Subquery(sub, output_field=IntegerField()), 0)
+
+
+# Sortable Progress columns → ORDER BY expression (ascending).
+PROGRESS_SORTS = {
+    "so": F("so_number"),
+    "sold_to": Lower("sold_to"),
+    "status": F("status_rank"),
+    "rows": F("rows_total"),
+    "refresh": F("refreshed_at"),
+    "final": F("final_pct"),
+}
+
+
 @module_required("mo_close.progress")
 def progress(request):
     show = request.GET.get("show", "open")
@@ -320,16 +344,95 @@ def progress(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(Q(so_number__icontains=q) | Q(sold_to__icontains=q))
-    qs = qs.order_by("status", "-generated_at", "-created_at")
+
+    sort = request.GET.get("sort", "")
+    direction = "asc" if request.GET.get("dir") == "asc" else "desc"
+    if sort in PROGRESS_SORTS:
+        qs = qs.annotate(
+            status_rank=Case(
+                When(status=PackingList.Status.SAVED, then=Value(1)),
+                When(status=PackingList.Status.GENERATED, then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            ),
+            rows_total=_row_count(MORecord, "packing_list") + _row_count(TransferRecord, "mo__packing_list"),
+            final_total=_row_count(MORecord, "packing_list", final_confirmed=True)
+            + _row_count(TransferRecord, "mo__packing_list", final_confirmed=True),
+        ).annotate(
+            final_pct=Case(
+                When(rows_total=0, then=Value(-1.0)),
+                default=Cast("final_total", FloatField()) * 100.0 / F("rows_total"),
+                output_field=FloatField(),
+            )
+        )
+        expr = PROGRESS_SORTS[sort]
+        order = expr.asc(nulls_first=True) if direction == "asc" else expr.desc(nulls_last=True)
+        qs = qs.order_by(order, "so_number")
+    else:
+        sort = ""
+        qs = qs.order_by("status", "-generated_at", "-created_at")
+
     page = Paginator(qs, 20).get_page(request.GET.get("page"))
     counts = services.progress_counts(page.object_list)
     for pl in page.object_list:
         pl.progress = counts[pl.pk]
+
+    base = {"show": show, "q": q}
+    sort_urls = {
+        key: "?" + urlencode({**base, "sort": key, "dir": "desc" if sort == key and direction == "asc" else "asc"})
+        for key in PROGRESS_SORTS
+    }
     return render(
         request,
         "mo_close/progress.html",
-        {"page": page, "show": show, "q": q, "query": urlencode({"show": show, "q": q})},
+        {
+            "page": page,
+            "show": show,
+            "q": q,
+            "sort": sort,
+            "dir": direction,
+            "sort_urls": sort_urls,
+            "query": urlencode({**base, "sort": sort, "dir": direction} if sort else base),
+        },
     )
+
+
+# --- Reports ----------------------------------------------------------------------------------
+
+
+@module_required("mo_close.reports")
+def reports_view(request):
+    f = reports.ReportFilters.from_query(request.GET)
+    data = reports.build(f)
+    return render(
+        request,
+        "mo_close/reports.html",
+        {
+            **data,
+            "groups": reports.GROUPS,
+            "bases": reports.BASES,
+            "statuses": reports.STATUSES,
+            "presets": reports.PRESETS,
+            "export_query": f.query(),
+        },
+    )
+
+
+@module_required("mo_close.reports")
+def reports_export(request, fmt):
+    f = reports.ReportFilters.from_query(request.GET)
+    data = reports.build(f)
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    if fmt == "xlsx":
+        content, filename, ctype = report_exports.report_excel(data), f"MO-To-Be-Close_report_{stamp}.xlsx", XLSX
+    elif fmt == "pdf":
+        content, filename, ctype = report_exports.report_pdf(data), f"MO-To-Be-Close_report_{stamp}.pdf", "application/pdf"
+    else:
+        raise Http404
+    services.audit.log(
+        request, Section.EXPORT, f"Exported report {fmt.upper()}", system=SYSTEM, target=filename, comment=f.description
+    )
+    return _download(content, filename, ctype)
 
 
 # --- Exports ----------------------------------------------------------------------------------

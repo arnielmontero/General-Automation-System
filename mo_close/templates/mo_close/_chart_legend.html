@@ -1,0 +1,12 @@
+{# Legend + table view for a part-to-whole chart: colour swatch, label, count and share. #}
+<table class="table table-sm chart-legend mb-0 mt-2">
+  <tbody>
+  {% for i in items %}
+    <tr>
+      <td><span class="swatch" style="background: {{ i.color }}"></span>{{ i.label }}</td>
+      <td class="text-end fw-semibold">{{ i.value }}</td>
+      <td class="text-end muted" style="width: 52px">{% if total %}{% widthratio i.value total 100 %}%{% else %}—{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

@@ -19,4 +19,6 @@ urlpatterns = [
     path("rows/<str:kind>/<int:pk>/<str:action>/", views.row_action, name="row_action"),
     path("progress/", views.progress, name="progress"),
     path("progress/export/<str:fmt>/", views.progress_export, name="progress_export"),
+    path("reports/", views.reports_view, name="reports"),
+    path("reports/export/<str:fmt>/", views.reports_export, name="reports_export"),
 ]

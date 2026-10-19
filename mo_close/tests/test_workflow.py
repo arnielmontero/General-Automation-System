@@ -252,6 +252,85 @@ class WorkflowTests(TestCase):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         self.assertEqual(self.client.get(reverse("mo_close:record_pdf", args=[pl.pk])).status_code, 200)
 
+    # --- Reports ---
+    def _second_record(self):
+        return PackingList.objects.create(
+            so_number="S00001", status=PackingList.Status.SAVED, sold_to="Aardvark Oy\nFinland",
+            created_by=self.user, pdf="packing_lists/none.pdf",
+        )
+
+    def test_reports_numbers(self):
+        from mo_close import reports
+
+        pl = self.save_and_generate()
+        self._second_record()
+        tr = TransferRecord.objects.get(reference="PL3/PC/17852")
+        self.odoo.set_state("stock.picking", 202, "done")
+        self.act(tr, "mark")
+        self.act(pl.mos.get(reference="PL3/MO/06873"), "mark")
+        self.client.force_login(self.checker)
+        self.act(tr, "confirm")
+
+        data = reports.build(reports.ReportFilters.from_query({"preset": "all"}))
+        k = data["kpis"]
+        self.assertEqual((k["records"], k["in_progress"], k["not_generated"], k["rows"], k["mos"], k["transfers"]), (2, 1, 1, 5, 2, 3))
+        self.assertEqual((k["marked"], k["odoo_done"], k["final"], k["percent"]), (2, 1, 1, 20))
+        self.assertEqual({s["key"]: s["value"] for s in data["stages"]}, {"open": 3, "waiting": 0, "flag": 1, "confirmed": 1})
+        self.assertEqual({s["key"]: s["value"] for s in data["mo_states"]}["confirmed"], 2)
+        self.assertEqual(sum(p["records"] for p in data["periods"]), 2)
+        self.assertEqual(sum(p["confirmations"] for p in data["periods"]), 1)
+
+        data = reports.build(reports.ReportFilters.from_query({"preset": "all", "status": "open", "so": "4743"}))
+        self.assertEqual([s["pl"].so_number for s in data["per_so"]], ["S04743"])
+        data = reports.build(reports.ReportFilters.from_query({"preset": "all", "basis": "doc_date"}))
+        self.assertEqual(data["kpis"]["records"], 1)  # S00001 has no packing list date
+        data = reports.build(reports.ReportFilters.from_query({"from": "2001-01-01", "to": "2001-12-31", "group": "day"}))
+        self.assertEqual((data["kpis"]["records"], len(data["periods"])), (0, 365))
+
+    def test_reports_page_and_downloads(self):
+        self.save_and_generate()
+        resp = self.client.get(reverse("mo_close:reports"))
+        self.assertContains(resp, "SO records per month")
+        self.assertContains(resp, 'id="report-data"')
+        for preset in ("today", "month", "year", "12m", "all"):
+            self.assertEqual(self.client.get(reverse("mo_close:reports"), {"preset": preset}).status_code, 200)
+        for group in ("day", "month", "year"):
+            self.assertContains(self.client.get(reverse("mo_close:reports"), {"preset": "all", "group": group}), "S04743")
+        for fmt, magic in (("xlsx", b"PK"), ("pdf", b"%PDF")):
+            resp = self.client.get(reverse("mo_close:reports_export", args=[fmt]), {"preset": "all", "group": "day"})
+            self.assertTrue(resp.content.startswith(magic), fmt)
+        empty = self.client.get(reverse("mo_close:reports_export", args=["pdf"]), {"from": "2001-01-01", "to": "2001-01-31"})
+        self.assertTrue(empty.content.startswith(b"%PDF"))
+        self.assertTrue(AuditLog.objects.filter(action="Exported report PDF").exists())
+
+    def test_reports_permission(self):
+        self.client.force_login(User.objects.create(username="v@sawo.com", role=Role.objects.create(name="Viewer", modules=["mo_close.records"])))
+        self.assertEqual(self.client.get(reverse("mo_close:reports")).status_code, 403)
+
+    # --- Progress sorting ---
+    def test_progress_sort(self):
+        pl = self.save_and_generate()
+        other = self._second_record()
+        mo = pl.mos.first()
+        self.act(mo, "mark")
+
+        def order(**params):
+            resp = self.client.get(reverse("mo_close:progress"), {"show": "all", **params})
+            return [p.so_number for p in resp.context["page"].object_list]
+
+        self.assertEqual(order(sort="so", dir="asc"), ["S00001", "S04743"])
+        self.assertEqual(order(sort="so", dir="desc"), ["S04743", "S00001"])
+        self.assertEqual(order(sort="sold_to", dir="asc"), ["S00001", "S04743"])  # Aardvark before Wellzijn
+        self.assertEqual(order(sort="status", dir="asc"), ["S00001", "S04743"])  # not generated before in progress
+        self.assertEqual(order(sort="rows", dir="desc"), ["S04743", "S00001"])
+        self.assertEqual(order(sort="refresh", dir="desc"), ["S04743", "S00001"])
+        self.assertEqual(order(sort="final", dir="asc"), ["S00001", "S04743"])
+        resp = self.client.get(reverse("mo_close:progress"), {"show": "all", "sort": "rows", "dir": "asc"})
+        self.assertContains(resp, 'aria-sort="ascending"')
+        self.assertContains(resp, "sort=rows&amp;dir=desc")  # clicking again flips the direction
+        self.assertEqual(order(sort="bogus"), order())  # unknown sort → default order
+        self.assertTrue(other.pk)
+
     def test_admin_pages(self):
         self.assertEqual(self.client.get(reverse("users")).status_code, 403)
         admin = User.objects.create(username="admin@sawo.com", role=Role.admin())

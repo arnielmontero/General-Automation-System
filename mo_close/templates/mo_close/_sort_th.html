@@ -1,0 +1,6 @@
+{% load mo_close_tags %}<th class="{{ cls }}" {% if style %}style="{{ style }}"{% endif %} {% if sort == key %}aria-sort="{% if dir == 'asc' %}ascending{% else %}descending{% endif %}"{% endif %}>
+  <a class="sort-link {% if sort == key %}active{% endif %}" href="{{ sort_urls|get_item:key }}" title="Sort by {{ label }}">
+    {{ label }}
+    {% if sort == key %}<i class="bi bi-caret-{% if dir == 'asc' %}up{% else %}down{% endif %}-fill"></i>{% else %}<i class="bi bi-chevron-expand"></i>{% endif %}
+  </a>
+</th>

@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% load mo_close_tags %}
+{% block title %}Reports{% endblock %}
+{% block page_kicker %}MO's To Be Close{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block header_actions %}
+  <div class="dropdown">
+    <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Download Report</button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><h6 class="dropdown-header">This report (current filters)</h6></li>
+      <li><a class="dropdown-item" href="{% url 'mo_close:reports_export' 'xlsx' %}?{{ export_query }}"><i class="bi bi-file-earmark-excel"></i> Excel (with charts)</a></li>
+      <li><a class="dropdown-item" href="{% url 'mo_close:reports_export' 'pdf' %}?{{ export_query }}"><i class="bi bi-file-earmark-pdf"></i> PDF (with charts)</a></li>
+    </ul>
+  </div>
+{% endblock %}
+{% block content %}
+{% with f=filters k=kpis %}
+
+{# ---------- Filters: one row above everything they scope ---------- #}
+<form class="card-soft mb-3" method="get">
+  <div class="card-body-soft">
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+      <span class="small fw-semibold muted me-1">Quick range</span>
+      <div class="btn-group btn-group-sm flex-wrap">
+        {% for key, label in presets.items %}
+          <button class="btn {% if f.preset == key %}btn-primary{% else %}btn-soft{% endif %}" name="preset" value="{{ key }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small fw-semibold mb-1">From</label>
+        <input class="form-control form-control-sm" type="date" name="from" value="{{ f.date_from|date:'Y-m-d' }}">
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small fw-semibold mb-1">To</label>
+        <input class="form-control form-control-sm" type="date" name="to" value="{{ f.date_to|date:'Y-m-d' }}">
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small fw-semibold mb-1">Date based on</label>
+        <select class="form-select form-select-sm" name="basis">
+          {% for key, label in bases.items %}<option value="{{ key }}" {% if f.basis == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small fw-semibold mb-1">Group by</label>
+        <select class="form-select form-select-sm" name="group">
+          {% for key, label in groups.items %}<option value="{{ key }}" {% if f.group == key %}selected{% endif %}>Per {{ label|lower }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3 col-xl-2">
+        <label class="form-label small fw-semibold mb-1">Progress</label>
+        <select class="form-select form-select-sm" name="status">
+          {% for key, label in statuses.items %}<option value="{{ key }}" {% if f.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-3 col-xl-1">
+        <label class="form-label small fw-semibold mb-1">SO</label>
+        <input class="form-control form-control-sm" type="search" name="so" value="{{ f.so }}" placeholder="S04743">
+      </div>
+      <div class="col-12 col-md-6 col-xl-1 d-grid">
+        <button class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Apply</button>
+      </div>
+    </div>
+    <div class="small-note mt-2"><i class="bi bi-info-circle"></i> {{ f.description }}</div>
+  </div>
+</form>
+
+{# ---------- KPI tiles ---------- #}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-blue"><i class="bi bi-journal-text"></i></span></div>
+    <div class="kpi-label">SO records</div><div class="kpi-value">{{ k.records }}</div>
+    <div class="small-note">{{ k.in_progress }} in progress · {{ k.not_generated }} not generated · {{ k.closed }} closed</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-purple"><i class="bi bi-diagram-3"></i></span></div>
+    <div class="kpi-label">Rows (MO + transfers)</div><div class="kpi-value">{{ k.rows }}</div>
+    <div class="small-note">{{ k.mos }} MOs · {{ k.transfers }} transfers</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-yellow"><i class="bi bi-check2-square"></i></span></div>
+    <div class="kpi-label">Marked done by users</div><div class="kpi-value">{{ k.marked }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-blue"><i class="bi bi-cloud-check"></i></span></div>
+    <div class="kpi-label">Done in Odoo</div><div class="kpi-value">{{ k.odoo_done }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-green"><i class="bi bi-patch-check"></i></span><span class="small fw-semibold">{{ k.percent }}%</span></div>
+    <div class="kpi-label">Final confirmed</div><div class="kpi-value">{{ k.final }}</div>
+    <div class="progress mt-2"><div class="progress-bar {% if k.percent == 100 %}bg-done{% endif %}" style="width: {{ k.percent }}%"></div></div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-orange"><i class="bi bi-stopwatch"></i></span></div>
+    <div class="kpi-label">Avg. days to close</div><div class="kpi-value">{{ k.avg_days_to_close|default:"—" }}</div>
+    <div class="small-note">Created → closed (closed SOs)</div></div></div>
+</div>
+
+{# ---------- Charts ---------- #}
+<div class="row g-3 mb-3">
+  <div class="col-xl-8">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>SO records per {{ f.group }}</h2><span class="small-note">{{ bases|get_item:f.basis }}</span></div>
+      <div class="card-body-soft"><div class="chart-box"><canvas id="chart-periods" aria-label="SO records per period by status" role="img"></canvas></div></div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>Row progress</h2><span class="small-note">{{ k.rows }} rows</span></div>
+      <div class="card-body-soft">
+        <div class="chart-box chart-box-sm"><canvas id="chart-stages" aria-label="Row progress" role="img"></canvas></div>
+        {% include "mo_close/_chart_legend.html" with items=stages total=k.rows %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>Final confirmations per {{ f.group }}</h2><span class="small-note">Rows confirmed by Checker</span></div>
+      <div class="card-body-soft"><div class="chart-box"><canvas id="chart-confirmations" aria-label="Final confirmations per period" role="img"></canvas></div></div>
+    </div>
+  </div>
+  <div class="col-xl-6">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>% confirmed by SO</h2><span class="small-note">Final confirmed rows ÷ all rows</span></div>
+      <div class="card-body-soft"><div class="chart-box" id="by-so-box"><canvas id="chart-by-so" aria-label="Percent confirmed by SO" role="img"></canvas></div></div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>MO states</h2><span class="small-note">{{ k.mos }} MOs (Odoo state)</span></div>
+      <div class="card-body-soft">
+        <div class="chart-box chart-box-sm"><canvas id="chart-mo-states" aria-label="MO states" role="img"></canvas></div>
+        {% include "mo_close/_chart_legend.html" with items=mo_states total=k.mos %}
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>Transfer states</h2><span class="small-note">{{ k.transfers }} transfers (Odoo status)</span></div>
+      <div class="card-body-soft">
+        <div class="chart-box chart-box-sm"><canvas id="chart-transfer-states" aria-label="Transfer states" role="img"></canvas></div>
+        {% include "mo_close/_chart_legend.html" with items=transfer_states total=k.transfers %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ---------- Tables (the table view of every chart) ---------- #}
+<div class="card-soft mb-3">
+  <div class="card-head"><h2>By {{ f.group }}</h2><span class="small-note">{{ periods|length }} period(s)</span></div>
+  <div class="table-responsive" style="max-height: 420px">
+    <table class="table table-soft">
+      <thead class="sticky-top"><tr><th>{{ groups|get_item:f.group }}</th><th class="text-end">SO records</th><th class="text-end">In progress</th><th class="text-end">Not generated</th><th class="text-end">Closed</th><th class="text-end">Rows</th><th class="text-end">Final confirmed (rows)</th><th class="text-end">Confirmations in period</th></tr></thead>
+      <tbody>
+      {% for p in periods %}
+        <tr {% if not p.records and not p.confirmations %}class="muted"{% endif %}>
+          <td class="fw-semibold text-nowrap">{{ p.label }}</td>
+          <td class="text-end">{{ p.records }}</td><td class="text-end">{{ p.generated }}</td><td class="text-end">{{ p.saved }}</td><td class="text-end">{{ p.closed }}</td>
+          <td class="text-end">{{ p.rows }}</td><td class="text-end">{{ p.final }}</td><td class="text-end">{{ p.confirmations }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="text-center muted py-4">No data for these filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card-soft">
+  <div class="card-head"><h2>By SO ({{ per_so|length }})</h2></div>
+  <div class="table-responsive">
+    <table class="table table-soft">
+      <thead><tr><th>SO</th><th>Sold To</th><th>Date</th><th>Status</th><th class="text-end">Rows</th><th class="text-end">Marked done</th><th class="text-end">Done in Odoo</th><th class="text-end">Final confirmed</th><th style="min-width:150px">Progress</th><th class="text-end">Days open</th></tr></thead>
+      <tbody>
+      {% for s in per_so %}
+        <tr>
+          <td class="fw-semibold">{% if "mo_close.records" in modules %}<a href="{% url 'mo_close:record_detail' s.pl.pk %}">{{ s.pl.so_number }}</a>{% else %}{{ s.pl.so_number }}{% endif %}</td>
+          <td>{{ s.pl.sold_to_name|default:"—" }}</td>
+          <td class="text-nowrap">{{ s.date|date:"d-M-Y"|default:"—" }}</td>
+          <td>{% record_pill s.pl %}</td>
+          <td class="text-end">{{ s.total }}</td><td class="text-end">{{ s.marked }}</td><td class="text-end">{{ s.system }}</td><td class="text-end">{{ s.final }}</td>
+          <td>{% include "mo_close/_progress_bar.html" with p=s %}</td>
+          <td class="text-end">{{ s.days_open }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="10" class="text-center muted py-4">No SO records for these filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endwith %}
+{{ chart|json_script:"report-data" }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById("report-data").textContent);
+  var INK = { muted: "#898781", grid: "#e1e0d9", axis: "#c3c2b7", surface: "#ffffff", text: "#1d2330" };
+  Chart.defaults.font.family = "Inter, system-ui, -apple-system, 'Segoe UI', sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = INK.muted;
+  Chart.defaults.plugins.tooltip.backgroundColor = "#1d2330";
+  Chart.defaults.plugins.tooltip.padding = 10;
+  Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  Chart.defaults.maintainAspectRatio = false;
+
+  function axes(stacked, opts) {
+    opts = opts || {};
+    return {
+      x: Object.assign({ stacked: stacked, grid: { display: false }, border: { color: INK.axis }, ticks: { maxRotation: 0, autoSkip: true } }, opts.x || {}),
+      y: Object.assign({ stacked: stacked, beginAtZero: true, grid: { color: INK.grid }, border: { display: false }, ticks: { precision: 0 } }, opts.y || {})
+    };
+  }
+  function empty(id, total) {
+    if (total) return false;
+    var box = document.getElementById(id).parentElement;
+    box.innerHTML = '<div class="chart-empty">No data for these filters</div>';
+    return true;
+  }
+  function sum(a) { return a.reduce(function (s, v) { return s + v; }, 0); }
+  function fullLabel(items) { return items.length ? data.periods.full_labels[items[0].dataIndex] : ""; }
+
+  // 1. SO records per period, stacked by status (legend: 3 series)
+  var p = data.periods;
+  var periodTotal = sum(p.series.map(function (s) { return sum(s.data); }));
+  if (!empty("chart-periods", periodTotal)) {
+    new Chart(document.getElementById("chart-periods"), {
+      type: "bar",
+      data: { labels: p.labels, datasets: p.series.map(function (s) {
+        return { label: s.label, data: s.data, backgroundColor: s.color, borderColor: INK.surface, borderWidth: 1,
+                 borderRadius: 4, borderSkipped: "start", maxBarThickness: 36 };
+      }) },
+      options: { interaction: { mode: "index", intersect: false }, scales: axes(true),
+                 plugins: { tooltip: { callbacks: { title: fullLabel } }, legend: { position: "top", align: "end", labels: { boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 } } } }
+    });
+  }
+
+  // 2–4. Part-to-whole doughnuts (legend + counts listed under each chart)
+  function doughnut(id, items) {
+    var total = sum(items.map(function (i) { return i.value; }));
+    if (empty(id, total)) return;
+    new Chart(document.getElementById(id), {
+      type: "doughnut",
+      data: { labels: items.map(function (i) { return i.label; }),
+              datasets: [{ data: items.map(function (i) { return i.value; }), backgroundColor: items.map(function (i) { return i.color; }),
+                           borderColor: INK.surface, borderWidth: 2, hoverOffset: 4 }] },
+      options: { cutout: "62%", plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: function (c) { return " " + c.label + ": " + c.parsed + " (" + Math.round(100 * c.parsed / total) + "%)"; } } } } }
+    });
+  }
+  doughnut("chart-stages", data.stages);
+  doughnut("chart-mo-states", data.mo_states);
+  doughnut("chart-transfer-states", data.transfer_states);
+
+  // 5. Final confirmations per period — one series, no legend (the title names it)
+  if (!empty("chart-confirmations", sum(p.confirmations))) {
+    new Chart(document.getElementById("chart-confirmations"), {
+      type: "line",
+      data: { labels: p.labels, datasets: [{ label: "Confirmations", data: p.confirmations, borderColor: "#2a78d6", backgroundColor: "#2a78d6",
+              borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, pointBorderColor: INK.surface, pointBorderWidth: 2, tension: 0 }] },
+      options: { interaction: { mode: "index", intersect: false }, scales: axes(false), plugins: { legend: { display: false }, tooltip: { callbacks: { title: fullLabel } } } }
+    });
+  }
+
+  // 6. % confirmed by SO — one series, horizontal bars, height grows with the number of SOs
+  var s = data.by_so;
+  if (!empty("chart-by-so", s.labels.length)) {
+    document.getElementById("by-so-box").style.height = Math.max(240, 26 * s.labels.length + 60) + "px";
+    new Chart(document.getElementById("chart-by-so"), {
+      type: "bar",
+      data: { labels: s.labels, datasets: [{ label: "% confirmed", data: s.data, backgroundColor: "#2a78d6",
+              borderRadius: 4, borderSkipped: "start", maxBarThickness: 16 }] },
+      options: { indexAxis: "y",
+        scales: { x: { min: 0, max: 100, grid: { color: INK.grid }, border: { display: false }, ticks: { callback: function (v) { return v + "%"; } } },
+                  y: { grid: { display: false }, border: { color: INK.axis }, ticks: { color: INK.text } } },
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: function (c) { return " " + c.parsed.x + "% confirmed (" + s.detail[c.dataIndex] + ")"; } } } } }
+    });
+  }
+})();
+</script>
+{% endblock %}

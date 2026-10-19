@@ -267,7 +267,7 @@ PDF_COLUMNS = [  # (title, width mm, index in ROW_COLUMNS values)
 
 
 def _p(text, style=STYLE):
-    return Paragraph(str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace("\n", "<br/>"), style)
+    return Paragraph(("" if text is None else str(text)).replace("&", "&amp;").replace("<", "&lt;").replace("\n", "<br/>"), style)
 
 
 def _pdf_row(r):

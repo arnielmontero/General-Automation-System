@@ -41,6 +41,11 @@ def system_pill(row):
 
 
 @register.filter
+def get_item(mapping, key):
+    return mapping.get(key, "") if mapping else ""
+
+
+@register.filter
 def qty(value):
     """12.00 → 12, 2.50 → 2.5"""
     if value is None or value == "":

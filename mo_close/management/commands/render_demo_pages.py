@@ -6,6 +6,7 @@ Nothing is kept in the database: all demo data is created inside a transaction t
 Refuses to run on a database that already has records — use a separate empty database.
 """
 
+from datetime import timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -15,6 +16,7 @@ from django.db import transaction
 from django.test import Client
 from django.test.utils import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from core.models import Role, User
 from mo_close.models import PackingList, TransferRecord
@@ -74,13 +76,20 @@ class Command(BaseCommand):
             tr = TransferRecord.objects.get(reference="PL3/PC/17852")
             client.post(reverse("mo_close:row_action", args=["transfer", tr.pk, "mark"]))
             client.post(reverse("mo_close:row_action", args=["transfer", tr.pk, "confirm"]))
+            # A second, older record so the charts and sorting have more than one SO.
+            older = PackingList.objects.create(
+                so_number="S04622", status=PackingList.Status.SAVED, sold_to="Saunatec Oy\nFinland",
+                created_by=user, pdf="packing_lists/none.pdf",
+            )
+            PackingList.objects.filter(pk=older.pk).update(created_at=timezone.now() - timedelta(days=6))
 
             self._save(client, out, {
                 "dashboard": reverse("mo_close:dashboard"),
                 "records": reverse("mo_close:records"),
                 "new": reverse("mo_close:record_new"),
                 "detail": reverse("mo_close:record_detail", args=[pl.pk]),
-                "progress": reverse("mo_close:progress"),
+                "progress": reverse("mo_close:progress") + "?show=all&sort=final&dir=desc",
+                "reports": reverse("mo_close:reports") + "?preset=month",
                 "users": reverse("users"),
                 "roles": reverse("roles"),
                 "role_edit": reverse("role_edit", args=[Role.objects.get(name="Checker / Supervisor").pk]),
@@ -89,6 +98,8 @@ class Command(BaseCommand):
             for fmt in ("xlsx", "pdf"):
                 resp = client.get(reverse("mo_close:record_export", args=[pl.pk, fmt]))
                 (out / f"export.{fmt}").write_bytes(resp.content)
+                resp = client.get(reverse("mo_close:reports_export", args=[fmt]) + "?preset=month")
+                (out / f"report.{fmt}").write_bytes(resp.content)
             pl.pdf.delete(save=False)  # files are not part of the rolled-back transaction
         client.logout()
         self._save(client, out, {"login": reverse("login")})

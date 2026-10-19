@@ -23,6 +23,7 @@ LANDING_PAGES = [
     ("mo_close.dashboard", "mo_close:dashboard"),
     ("mo_close.records", "mo_close:records"),
     ("mo_close.progress", "mo_close:progress"),
+    ("mo_close.reports", "mo_close:reports"),
     ("mo_close.create", "mo_close:record_new"),
     ("admin.users", "users"),
     ("admin.roles", "roles"),
