@@ -362,6 +362,8 @@ def _read_state(client, row):
 
 def mark_done(request, row, client):
     """User marks a row done → the system immediately checks the state in Odoo."""
+    if not request.user.can("mo_close.mark_done"):
+        raise PermissionDenied
     if row.final_confirmed:
         raise ValidationError("This row already has final confirmation.")
     pl = _row_pl(row)
@@ -393,6 +395,8 @@ def mark_done(request, row, client):
 
 
 def unmark_done(request, row):
+    if not request.user.can("mo_close.mark_done"):
+        raise PermissionDenied
     if row.final_confirmed:
         raise ValidationError("This row already has final confirmation.")
     row.user_done, row.user_done_at, row.user_done_by = False, None, None
@@ -404,7 +408,7 @@ def unmark_done(request, row):
 
 def confirm_final(request, row, comment):
     """Checker / Supervisor final confirmation. A comment is required when the system did not confirm."""
-    if not request.user.is_checker:
+    if not request.user.can("mo_close.confirm"):
         raise PermissionDenied
     if not row.user_done:
         raise ValidationError("The row must be marked done first.")
@@ -429,7 +433,7 @@ def confirm_final(request, row, comment):
 
 
 def unconfirm_final(request, row, comment):
-    if not request.user.is_checker:
+    if not request.user.can("mo_close.confirm"):
         raise PermissionDenied
     row.final_confirmed, row.final_confirmed_at, row.final_confirmed_by = False, None, None
     row.final_comment = ""

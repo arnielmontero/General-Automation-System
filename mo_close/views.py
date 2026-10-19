@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from core.audit import Section
 from core.models import AuditLog
 from core.odoo import OdooError, OdooSessionExpired, client_for
-from core.permissions import admin_required
+from core.permissions import module_required
 
 from . import exports, services
 from .forms import NewRecordForm
@@ -47,6 +47,7 @@ def _record_logs(pl, limit=None):
 # --- Dashboard -------------------------------------------------------------------------------
 
 
+@module_required("mo_close.dashboard")
 def dashboard(request):
     by_status = dict(PackingList.objects.values_list("status").annotate(n=Count("id")))
     rows_filter = {"packing_list__status": PackingList.Status.GENERATED}
@@ -79,6 +80,7 @@ def dashboard(request):
 # --- Step 1: records -------------------------------------------------------------------------
 
 
+@module_required("mo_close.records")
 def records(request):
     qs = PackingList.objects.select_related("created_by")
     q = request.GET.get("q", "").strip()
@@ -107,6 +109,7 @@ def records(request):
     )
 
 
+@module_required("mo_close.create")
 def record_new(request):
     form = NewRecordForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -129,6 +132,7 @@ def record_new(request):
     return render(request, "mo_close/record_new.html", {"form": form})
 
 
+@module_required("mo_close.create")
 def record_preview(request, pk):
     pl = get_object_or_404(PackingList, pk=pk)
     if pl.status != PackingList.Status.DRAFT:
@@ -145,6 +149,7 @@ def record_preview(request, pk):
     return render(request, "mo_close/record_preview.html", {"pl": pl, "groups": pl.grouped_lines()})
 
 
+@module_required("mo_close.records")
 def record_detail(request, pk):
     pl = get_object_or_404(PackingList.objects.select_related("created_by", "generated_by"), pk=pk)
     if pl.status == PackingList.Status.DRAFT:
@@ -187,6 +192,7 @@ def record_detail(request, pk):
     )
 
 
+@module_required("mo_close.records")
 def record_pdf(request, pk):
     pl = get_object_or_404(PackingList, pk=pk)
     if not pl.pdf:
@@ -194,8 +200,8 @@ def record_pdf(request, pk):
     return FileResponse(pl.pdf.open("rb"), content_type="application/pdf", filename=pl.pdf_name or f"{pl.so_number}.pdf")
 
 
-@admin_required
 @require_POST
+@module_required("mo_close.delete")
 def record_delete(request, pk):
     pl = get_object_or_404(PackingList, pk=pk)
     so = pl.so_number
@@ -208,6 +214,7 @@ def record_delete(request, pk):
 
 
 @require_POST
+@module_required("mo_close.generate")
 def record_generate(request, pk):
     pl = get_object_or_404(PackingList, pk=pk)
     if pl.status == PackingList.Status.DRAFT:
@@ -229,6 +236,7 @@ def record_generate(request, pk):
 
 
 @require_POST
+@module_required("mo_close.generate")
 def record_refresh(request, pk):
     pl = get_object_or_404(PackingList, pk=pk)
     try:
@@ -246,6 +254,7 @@ def record_refresh(request, pk):
 
 
 @require_POST
+@module_required("mo_close.records")
 def row_action(request, kind, pk, action):
     if kind not in ("mo", "transfer"):
         raise Http404
@@ -268,7 +277,7 @@ def row_action(request, kind, pk, action):
     except ValidationError as exc:
         error = " ".join(exc.messages)
     except PermissionDenied:
-        error = "Only a Checker / Supervisor can do this."
+        error = "Your role does not allow this."
 
     mo = row if kind == "mo" else row.mo
     mo = MORecord.objects.select_related("packing_list", "user_done_by", "final_confirmed_by").get(pk=mo.pk)
@@ -288,6 +297,7 @@ def row_action(request, kind, pk, action):
     return redirect("mo_close:record_detail", pk=mo.packing_list_id)
 
 
+@module_required("mo_close.records")
 def record_progress_badge(request, pk):
     """Small HTMX fragment: progress summary of one record (refreshed after each row action)."""
     pl = get_object_or_404(PackingList, pk=pk)
@@ -299,6 +309,7 @@ def record_progress_badge(request, pk):
 # --- Progress (Step 3 monitoring) -----------------------------------------------------------------
 
 
+@module_required("mo_close.progress")
 def progress(request):
     show = request.GET.get("show", "open")
     qs = PackingList.objects.exclude(status=PackingList.Status.DRAFT).select_related("created_by")
@@ -333,6 +344,7 @@ def _download(content, filename, content_type):
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+@module_required("mo_close.export")
 def record_export(request, pk, fmt):
     pl = get_object_or_404(PackingList.objects.select_related("created_by", "generated_by"), pk=pk)
     stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
@@ -346,6 +358,7 @@ def record_export(request, pk, fmt):
     return _download(content, filename, ctype)
 
 
+@module_required("mo_close.export")
 def progress_export(request, fmt):
     """All rows not yet confirmed done, across open records."""
     records = list(

@@ -4,18 +4,19 @@
 {% block page_kicker %}Record · {{ pl.sold_to_name|default:"MO's To Be Close" }}{% endblock %}
 {% block page_title %}{{ pl.so_number }}{% endblock %}
 {% block header_actions %}
-  {% if pl.status != "closed" %}
+  {% if pl.status != "closed" and "mo_close.generate" in modules %}
     <form method="post" action="{% url 'mo_close:record_generate' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
       {% csrf_token %}
       <button class="btn btn-primary btn-sm"><i class="bi bi-cloud-download"></i> {% if pl.generated_at %}Generate again{% else %}Generate from Odoo{% endif %}</button>
     </form>
   {% endif %}
-  {% if pl.generated_at %}
+  {% if pl.generated_at and "mo_close.generate" in modules %}
     <form method="post" action="{% url 'mo_close:record_refresh' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
       {% csrf_token %}
       <button class="btn btn-soft btn-sm"><i class="bi bi-arrow-repeat"></i> Refresh from Odoo</button>
     </form>
   {% endif %}
+  {% if "mo_close.export" in modules %}
   <div class="dropdown">
     <button class="btn btn-soft btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
     <ul class="dropdown-menu dropdown-menu-end">
@@ -23,7 +24,8 @@
       <li><a class="dropdown-item" href="{% url 'mo_close:record_export' pl.pk 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
     </ul>
   </div>
-  {% if user.is_admin %}
+  {% endif %}
+  {% if "mo_close.delete" in modules %}
     <form method="post" action="{% url 'mo_close:record_delete' pl.pk %}" onsubmit="return confirm('Delete record {{ pl.so_number }} and all its tracking? This cannot be undone.')">
       {% csrf_token %}<button class="btn btn-soft btn-sm text-danger" title="Delete record"><i class="bi bi-trash"></i></button>
     </form>
@@ -56,9 +58,9 @@
         <div class="card-body-soft text-center py-5">
           <i class="bi bi-cloud-download fs-1 muted"></i>
           <p class="mt-2 mb-3">Collect this SO's Manufacturing Orders (Confirmed, In Progress, To Close) and their open transfers from Odoo.</p>
-          <form method="post" action="{% url 'mo_close:record_generate' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
+          {% if "mo_close.generate" in modules %}<form method="post" action="{% url 'mo_close:record_generate' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
             {% csrf_token %}<button class="btn btn-primary"><i class="bi bi-cloud-download"></i> Generate from Odoo</button>
-          </form>
+          </form>{% else %}<p class="small-note mb-0">Your role does not include Generate from Odoo.</p>{% endif %}
         </div>
       {% else %}
         <div class="table-responsive">

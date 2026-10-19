@@ -2,24 +2,20 @@ from functools import wraps
 
 from django.core.exceptions import PermissionDenied
 
-
-def checker_required(view):
-    """Checker / Supervisor or Admin."""
-
-    @wraps(view)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_checker:
-            raise PermissionDenied("Only a Checker / Supervisor can do this.")
-        return view(request, *args, **kwargs)
-
-    return wrapper
+from .modules import label
 
 
-def admin_required(view):
-    @wraps(view)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_admin:
-            raise PermissionDenied("Only an Admin can do this.")
-        return view(request, *args, **kwargs)
+def module_required(code):
+    """Allow the view only for users whose role has this module ticked."""
 
-    return wrapper
+    def decorator(view):
+        @wraps(view)
+        def wrapper(request, *args, **kwargs):
+            if not request.user.can(code):
+                raise PermissionDenied(f"Your role does not include “{label(code)}”.")
+            return view(request, *args, **kwargs)
+
+        wrapper.module_code = code
+        return wrapper
+
+    return decorator

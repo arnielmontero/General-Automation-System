@@ -16,8 +16,15 @@ Packing list → Odoo Manufacturing Orders → tracked until everything is confi
 Process: [docs/system_001/FLOW.md](docs/system_001/FLOW.md) · Design: [docs/system_001/DESIGN.md](docs/system_001/DESIGN.md)
 
 **Login** is with the Odoo account (email + password) of erp.sawo.com. Passwords are never stored. Odoo is only
-read, never changed. Roles (User / Checker / Admin) are set by an Admin under *Users & Roles*; the Odoo login(s)
-in `ADMIN_ODOO_LOGIN` are always Admin.
+read, never changed.
+
+**Roles & Permissions** (Administration): each role is a set of ticked **modules** (Dashboard, Records, New Record,
+Generate from Odoo, Mark done, Final confirmation, Progress, Export, Delete, Users, Roles, Logs). Admins create
+new roles with **New role** and tick their modules; each user gets one role from a dropdown on **Users**.
+Built-in roles: **Admin** (always every module, cannot be changed or deleted), **Checker / Supervisor**, and
+**User** (the default role given on first login — any role can be made the default). The Odoo login(s) in
+`ADMIN_ODOO_LOGIN` are always Admin. Only an Admin can give or remove the Admin role. Modules are defined in
+[core/modules.py](core/modules.py).
 
 ## Run (Docker)
 

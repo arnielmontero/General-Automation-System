@@ -8,7 +8,7 @@ Implements the process in [FLOW.md](FLOW.md).
 |---|---|
 | Hosting | Company PC / server on the office network, **Docker** |
 | Login | Odoo account **email + password** (no API key), checked live against erp.sawo.com |
-| Roles | Assigned inside the system by an Admin: **User**, **Checker**, **Admin** |
+| Roles | Roles & Permissions page: roles are created by an Admin and get **module checkmarks**; each user gets one role from a dropdown. Built-in: **Admin** (full access), **Checker / Supervisor**, **User** (default) |
 | Transfers saved (Step 2) | **All transfers not Done** — PC (Picking Components) and SFP (Store Finished Product) |
 | Mark done (Step 3) | **Each MO row and each transfer row** separately, each checked against its own Odoo state |
 | Odoo access | **Read-only.** The system never writes to Odoo |

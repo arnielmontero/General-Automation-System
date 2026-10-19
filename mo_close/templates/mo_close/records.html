@@ -4,7 +4,7 @@
 {% block page_kicker %}MO's To Be Close{% endblock %}
 {% block page_title %}Records{% endblock %}
 {% block header_actions %}
-  <a class="btn btn-primary btn-sm" href="{% url 'mo_close:record_new' %}"><i class="bi bi-plus-lg"></i> New Record</a>
+  {% if "mo_close.create" in modules %}<a class="btn btn-primary btn-sm" href="{% url 'mo_close:record_new' %}"><i class="bi bi-plus-lg"></i> New Record</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="card-soft">

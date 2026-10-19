@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Roles & Permissions{% endblock %}
+{% block page_kicker %}Administration{% endblock %}
+{% block page_title %}Roles &amp; Permissions{% endblock %}
+{% block header_actions %}
+  <a class="btn btn-primary btn-sm" href="{% url 'role_new' %}"><i class="bi bi-plus-lg"></i> New role</a>
+{% endblock %}
+{% block content %}
+<div class="card-soft">
+  <div class="card-head">
+    <h2>Roles ({{ roles|length }})</h2>
+    <span class="small-note">Each role is a set of ticked modules. Users get one role on the <a href="{% url 'users' %}">Users</a> page.</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-soft">
+      <thead><tr><th>Role</th><th>Module access</th><th class="text-center">Users</th><th class="text-end">Action</th></tr></thead>
+      <tbody>
+      {% for role in roles %}
+        <tr>
+          <td style="min-width: 200px">
+            <div class="fw-semibold">{{ role.name }}
+              {% if role.is_system %}<span class="pill pill-sm tone-gray">Built-in</span>{% endif %}
+              {% if role.is_default %}<span class="pill pill-sm tone-blue">Default</span>{% endif %}
+            </div>
+            <div class="small-note">{{ role.description|default:"" }}</div>
+          </td>
+          <td>
+            {% if role.full_access %}
+              <span class="pill tone-green"><i class="bi bi-shield-check"></i> Full access — all {{ module_total }} modules</span>
+            {% else %}
+              <div class="d-flex flex-wrap gap-1">
+                {% for m in role.module_list %}<span class="pill pill-sm tone-red">{{ m.label }}</span>{% empty %}<span class="muted small">No modules</span>{% endfor %}
+              </div>
+              <div class="small-note mt-1">{{ role.module_list|length }} of {{ module_total }} modules</div>
+            {% endif %}
+          </td>
+          <td class="text-center">{{ role.user_count }}</td>
+          <td class="text-end text-nowrap">
+            {% if not role.full_access or user.has_full_access %}
+              <a class="btn btn-outline-primary btn-xs" href="{% url 'role_edit' role.pk %}">{% if role.full_access %}View{% else %}Edit{% endif %}</a>
+            {% endif %}
+            {% if not role.is_system and not role.full_access %}
+              <form method="post" action="{% url 'role_delete' role.pk %}" class="d-inline" onsubmit="return confirm('Delete role {{ role.name }}?')">
+                {% csrf_token %}<button class="btn btn-soft btn-xs text-danger" {% if role.user_count or role.is_default %}disabled title="Give its users another role first / not the default role"{% endif %}><i class="bi bi-trash"></i></button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

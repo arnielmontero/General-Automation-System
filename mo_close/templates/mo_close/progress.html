@@ -4,6 +4,7 @@
 {% block page_kicker %}Step 3 · Monitor until done{% endblock %}
 {% block page_title %}Progress{% endblock %}
 {% block header_actions %}
+  {% if "mo_close.export" in modules %}
   <div class="dropdown">
     <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Download Report</button>
     <ul class="dropdown-menu dropdown-menu-end">
@@ -12,6 +13,7 @@
       <li><a class="dropdown-item" href="{% url 'mo_close:progress_export' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
     </ul>
   </div>
+  {% endif %}
 {% endblock %}
 {% block content %}
 <div class="card-soft">
@@ -44,7 +46,7 @@
           <td class="text-center">{{ p.system }}</td>
           <td>{% include "mo_close/_progress_bar.html" %}</td>
           <td class="small text-nowrap">{{ pl.refreshed_at|date:"d-M-Y H:i"|default:"—" }}</td>
-          <td class="text-end"><a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a></td>
+          <td class="text-end">{% if "mo_close.records" in modules %}<a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a>{% endif %}</td>
         </tr>
         {% endwith %}
       {% empty %}

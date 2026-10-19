@@ -1,17 +1,51 @@
+from functools import cached_property
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+
+from .modules import ALL_CODES
+
+
+class Role(models.Model):
+    """A named set of modules. Admins create roles and tick their modules; each user has one role."""
+
+    ADMIN = "Admin"
+
+    name = models.CharField(max_length=60, unique=True)
+    description = models.CharField(max_length=200, blank=True)
+    modules = models.JSONField(default=list, blank=True)
+    full_access = models.BooleanField(
+        default=False, help_text="Always has every module, including modules added later (Admin)."
+    )
+    is_system = models.BooleanField(default=False, help_text="Built-in role; cannot be deleted.")
+    is_default = models.BooleanField(default=False, help_text="Given to people on their first login.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-full_access", "name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def module_codes(self):
+        return set(ALL_CODES) if self.full_access else {c for c in self.modules if c in ALL_CODES}
+
+    @classmethod
+    def default(cls):
+        return cls.objects.filter(is_default=True).first()
+
+    @classmethod
+    def admin(cls):
+        return cls.objects.filter(full_access=True).order_by("id").first()
 
 
 class User(AbstractUser):
     """A person who logs in with their Odoo account. The role is managed inside this system."""
 
-    class Role(models.TextChoices):
-        USER = "user", "User"
-        CHECKER = "checker", "Checker / Supervisor"
-        ADMIN = "admin", "Admin"
-
-    role = models.CharField(max_length=10, choices=Role.choices, default=Role.USER)
+    role = models.ForeignKey(Role, null=True, blank=True, on_delete=models.PROTECT, related_name="users")
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, unique=True)
     last_odoo_login = models.DateTimeField(null=True, blank=True)
 
@@ -26,12 +60,22 @@ class User(AbstractUser):
         return self.get_full_name() or self.username
 
     @property
-    def is_checker(self):
-        return self.role in (self.Role.CHECKER, self.Role.ADMIN)
+    def role_name(self):
+        return self.role.name if self.role else "No role"
+
+    @cached_property
+    def modules(self):
+        """Module codes this user may use (from their role)."""
+        if not self.is_active or self.role is None:
+            return frozenset()
+        return frozenset(self.role.module_codes)
+
+    def can(self, code):
+        return code in self.modules
 
     @property
-    def is_admin(self):
-        return self.role == self.Role.ADMIN
+    def has_full_access(self):
+        return bool(self.role and self.role.full_access)
 
 
 class AuditLog(models.Model):
@@ -46,6 +90,7 @@ class AuditLog(models.Model):
         CONFIRMATION = "confirmation", "Final confirmation"
         EXPORT = "export", "Export"
         USERS = "users", "Users"
+        ROLES = "roles", "Roles & Permissions"
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)

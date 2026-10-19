@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.utils import timezone
 
-from .models import User
+from .models import Role, User
 from .odoo import OdooClient
 
 
@@ -22,7 +22,7 @@ class OdooBackend:
         login = (info.get("username") or username).strip().lower()
         user = User.objects.filter(odoo_uid=info["uid"]).first() or User.objects.filter(username=login).first()
         if user is None:
-            user = User(username=login, odoo_uid=info["uid"])
+            user = User(username=login, odoo_uid=info["uid"], role=Role.default())
             user.set_unusable_password()
 
         user.username = login
@@ -34,7 +34,7 @@ class OdooBackend:
             first, _, last = name.partition(" ")
             user.first_name, user.last_name = first[:150], last[:150]
         if login in settings.ADMIN_ODOO_LOGINS:
-            user.role = User.Role.ADMIN
+            user.role = Role.admin() or user.role
         user.last_odoo_login = timezone.now()
         user.save()
 
@@ -42,5 +42,5 @@ class OdooBackend:
         return user if user.is_active else None
 
     def get_user(self, user_id):
-        user = User.objects.filter(pk=user_id).first()
+        user = User.objects.select_related("role").filter(pk=user_id).first()
         return user if user and user.is_active else None

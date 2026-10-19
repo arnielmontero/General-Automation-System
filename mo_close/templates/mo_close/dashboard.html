@@ -2,8 +2,8 @@
 {% load mo_close_tags %}
 {% block title %}Dashboard{% endblock %}
 {% block header_actions %}
-  <a class="btn btn-soft btn-sm" href="{% url 'mo_close:progress_export' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Open items</a>
-  <a class="btn btn-primary btn-sm" href="{% url 'mo_close:record_new' %}"><i class="bi bi-plus-lg"></i> New Record</a>
+  {% if "mo_close.export" in modules %}<a class="btn btn-soft btn-sm" href="{% url 'mo_close:progress_export' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Open items</a>{% endif %}
+  {% if "mo_close.create" in modules %}<a class="btn btn-primary btn-sm" href="{% url 'mo_close:record_new' %}"><i class="bi bi-plus-lg"></i> New Record</a>{% endif %}
 {% endblock %}
 {% block content %}
 <div class="row g-3 mb-3">
@@ -49,10 +49,10 @@
               <td>{% record_pill pl %}</td>
               <td>{% include "mo_close/_progress_bar.html" with p=pl.progress %}</td>
               <td class="small text-nowrap">{{ pl.generated_at|date:"d-M-Y H:i"|default:"—" }}</td>
-              <td class="text-end"><a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a></td>
+              <td class="text-end">{% if "mo_close.records" in modules %}<a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a>{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="6" class="text-center muted py-4">Nothing in progress. <a href="{% url 'mo_close:record_new' %}">Create a new record</a>.</td></tr>
+            <tr><td colspan="6" class="text-center muted py-4">Nothing in progress.{% if "mo_close.create" in modules %} <a href="{% url 'mo_close:record_new' %}">Create a new record</a>.{% endif %}</td></tr>
           {% endfor %}
           </tbody>
         </table>

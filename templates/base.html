@@ -19,21 +19,26 @@
       <img src="{% static 'img/sawo-logo.png' %}" alt="SAWO">
       <span>General<br>Automation System</span>
     </a>
+    {% if "mo_close.records" in modules %}
     <form class="sidebar-search" method="get" action="{% url 'mo_close:records' %}">
       <i class="bi bi-search"></i>
       <input class="form-control form-control-sm" type="search" name="q" placeholder="Search SO…" value="{{ request.GET.q|default:'' }}">
     </form>
+    {% endif %}
 
-    <div class="nav-section">MO's To Be Close</div>
-    <a class="side-link {% if ns == 'mo_close' and url_name == 'dashboard' %}active{% endif %}" href="{% url 'mo_close:dashboard' %}"><i class="bi bi-grid"></i> Dashboard</a>
-    <a class="side-link {% if ns == 'mo_close' and url_name in 'records,record_detail,record_preview' %}active{% endif %}" href="{% url 'mo_close:records' %}"><i class="bi bi-journal-text"></i> Records</a>
-    <a class="side-link {% if ns == 'mo_close' and url_name == 'record_new' %}active{% endif %}" href="{% url 'mo_close:record_new' %}"><i class="bi bi-file-earmark-arrow-up"></i> New Record</a>
-    <a class="side-link {% if ns == 'mo_close' and url_name == 'progress' %}active{% endif %}" href="{% url 'mo_close:progress' %}"><i class="bi bi-list-check"></i> Progress</a>
+    {% if "mo_close.dashboard" in modules or "mo_close.records" in modules or "mo_close.create" in modules or "mo_close.progress" in modules %}
+      <div class="nav-section">MO's To Be Close</div>
+      {% if "mo_close.dashboard" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'dashboard' %}active{% endif %}" href="{% url 'mo_close:dashboard' %}"><i class="bi bi-grid"></i> Dashboard</a>{% endif %}
+      {% if "mo_close.records" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name in 'records,record_detail,record_preview' %}active{% endif %}" href="{% url 'mo_close:records' %}"><i class="bi bi-journal-text"></i> Records</a>{% endif %}
+      {% if "mo_close.create" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'record_new' %}active{% endif %}" href="{% url 'mo_close:record_new' %}"><i class="bi bi-file-earmark-arrow-up"></i> New Record</a>{% endif %}
+      {% if "mo_close.progress" in modules %}<a class="side-link {% if ns == 'mo_close' and url_name == 'progress' %}active{% endif %}" href="{% url 'mo_close:progress' %}"><i class="bi bi-list-check"></i> Progress</a>{% endif %}
+    {% endif %}
 
-    {% if user.is_admin %}
+    {% if "admin.users" in modules or "admin.roles" in modules or "admin.logs" in modules %}
       <div class="nav-section">Administration</div>
-      <a class="side-link {% if url_name == 'users' %}active{% endif %}" href="{% url 'users' %}"><i class="bi bi-people"></i> Users &amp; Roles</a>
-      <a class="side-link {% if url_name == 'logs' %}active{% endif %}" href="{% url 'logs' %}"><i class="bi bi-clock-history"></i> Logs</a>
+      {% if "admin.users" in modules %}<a class="side-link {% if url_name == 'users' %}active{% endif %}" href="{% url 'users' %}"><i class="bi bi-people"></i> Users</a>{% endif %}
+      {% if "admin.roles" in modules %}<a class="side-link {% if url_name in 'roles,role_new,role_edit' %}active{% endif %}" href="{% url 'roles' %}"><i class="bi bi-shield-lock"></i> Roles &amp; Permissions</a>{% endif %}
+      {% if "admin.logs" in modules %}<a class="side-link {% if url_name == 'logs' %}active{% endif %}" href="{% url 'logs' %}"><i class="bi bi-clock-history"></i> Logs</a>{% endif %}
     {% endif %}
 
     <div class="sidebar-footer">
@@ -41,7 +46,7 @@
         <span class="avatar">{{ user.first_name|first|default:user.username|first|upper }}{{ user.last_name|first|upper }}</span>
         <div class="flex-grow-1 overflow-hidden">
           <div class="name text-truncate">{{ user.display_name }}</div>
-          <div class="role">{{ user.get_role_display }}</div>
+          <div class="role">{{ user.role_name }}</div>
         </div>
         <form method="post" action="{% url 'logout' %}">{% csrf_token %}
           <button class="btn btn-sm btn-link text-secondary p-0" title="Log out"><i class="bi bi-box-arrow-right fs-5"></i></button>

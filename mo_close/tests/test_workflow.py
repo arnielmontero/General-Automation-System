@@ -9,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from core.models import AuditLog, User
+from core.models import AuditLog, Role, User
 from core.odoo import OdooAuthError
 from mo_close.models import MORecord, PackingList, TransferRecord
 
@@ -39,7 +39,7 @@ class LoginTests(TestCase):
             resp = self.client.post(reverse("login"), {"email": "jane@sawo.com", "password": "secret"})
         self.assertRedirects(resp, reverse("home"), fetch_redirect_response=False)
         user = User.objects.get(odoo_uid=42)
-        self.assertEqual((user.username, user.first_name, user.last_name, user.role), ("jane@sawo.com", "Jane", "Cruz", "user"))
+        self.assertEqual((user.username, user.first_name, user.last_name, user.role.name), ("jane@sawo.com", "Jane", "Cruz", "User"))
         self.assertFalse(user.has_usable_password())
         self.assertEqual(self.client.session["odoo_session_id"], "sid-123")
 
@@ -49,7 +49,7 @@ class LoginTests(TestCase):
         client_cls.return_value.session_id = "sid-7"
         with self.settings(ADMIN_ODOO_LOGINS=["boss@sawo.com"]):
             self.client.post(reverse("login"), {"email": "boss@sawo.com", "password": "x"})
-        self.assertEqual(User.objects.get(odoo_uid=7).role, "admin")
+        self.assertEqual(User.objects.get(odoo_uid=7).role.name, "Admin")
 
     @mock.patch("core.backends.OdooClient")
     def test_wrong_password(self, client_cls):
@@ -78,8 +78,8 @@ class WorkflowTests(TestCase):
         patcher = mock.patch("mo_close.views.client_for", return_value=self.odoo)
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.user = User.objects.create(username="user@sawo.com", first_name="Ana", role=User.Role.USER)
-        self.checker = User.objects.create(username="checker@sawo.com", first_name="Ben", role=User.Role.CHECKER)
+        self.user = User.objects.create(username="user@sawo.com", first_name="Ana", role=Role.objects.get(name="User"))
+        self.checker = User.objects.create(username="checker@sawo.com", first_name="Ben", role=Role.objects.get(name="Checker / Supervisor"))
         self.client.force_login(self.user)
 
     # --- helpers ---
@@ -176,7 +176,8 @@ class WorkflowTests(TestCase):
         self.assertEqual(mo.system_status, "not_done")
 
         # A plain user cannot confirm.
-        self.act(mo, "confirm", comment="ok")
+        resp = self.act(mo, "confirm", comment="ok")
+        self.assertContains(resp, "Your role does not allow this.")
         mo.refresh_from_db()
         self.assertFalse(mo.final_confirmed)
 
@@ -253,9 +254,10 @@ class WorkflowTests(TestCase):
 
     def test_admin_pages(self):
         self.assertEqual(self.client.get(reverse("users")).status_code, 403)
-        admin = User.objects.create(username="admin@sawo.com", role=User.Role.ADMIN)
+        admin = User.objects.create(username="admin@sawo.com", role=Role.admin())
         self.client.force_login(admin)
         self.assertEqual(self.client.get(reverse("logs")).status_code, 200)
-        self.client.post(reverse("user_update", args=[self.user.pk]), {"role": "checker", "active": "1"})
+        checker_role = Role.objects.get(name="Checker / Supervisor")
+        self.client.post(reverse("user_update", args=[self.user.pk]), {"role": checker_role.pk, "active": "1"})
         self.user.refresh_from_db()
-        self.assertEqual(self.user.role, "checker")
+        self.assertEqual(self.user.role, checker_role)

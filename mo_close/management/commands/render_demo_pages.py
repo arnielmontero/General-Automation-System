@@ -3,19 +3,20 @@
     python manage.py render_demo_pages /tmp/pages
 
 Nothing is kept in the database: all demo data is created inside a transaction that is rolled back.
+Refuses to run on a database that already has records — use a separate empty database.
 """
 
 from pathlib import Path
 from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.test import Client
 from django.test.utils import override_settings
 from django.urls import reverse
 
-from core.models import User
+from core.models import Role, User
 from mo_close.models import PackingList, TransferRecord
 from mo_close.tests.fake_odoo import FakeOdoo
 
@@ -34,6 +35,11 @@ class Command(BaseCommand):
 
     @override_settings(ALLOWED_HOSTS=["*"])
     def handle(self, out_dir, **options):
+        if PackingList.objects.exists():
+            raise CommandError(
+                "This database has real records. Run this only against an empty database, e.g. "
+                "docker compose run --rm -e POSTGRES_DB=gas_demo web …"
+            )
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         try:
@@ -47,7 +53,8 @@ class Command(BaseCommand):
     def _render(self, out):
         odoo = FakeOdoo()
         user = User.objects.create(username="demo.user@sawo.com", first_name="Arniel", last_name="Montero",
-                                   role=User.Role.CHECKER)
+                                   role=Role.admin())
+        User.objects.create(username="ana.cruz@sawo.com", first_name="Ana", last_name="Cruz", role=Role.default())
         client = Client()
         client.force_login(user)
         with mock.patch("mo_close.views.client_for", return_value=odoo):
@@ -74,6 +81,10 @@ class Command(BaseCommand):
                 "new": reverse("mo_close:record_new"),
                 "detail": reverse("mo_close:record_detail", args=[pl.pk]),
                 "progress": reverse("mo_close:progress"),
+                "users": reverse("users"),
+                "roles": reverse("roles"),
+                "role_edit": reverse("role_edit", args=[Role.objects.get(name="Checker / Supervisor").pk]),
+                "role_new": reverse("role_new"),
             })
             for fmt in ("xlsx", "pdf"):
                 resp = client.get(reverse("mo_close:record_export", args=[pl.pk, fmt]))
