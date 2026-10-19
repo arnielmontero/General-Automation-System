@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Users & Roles{% endblock %}
+{% block page_kicker %}Administration{% endblock %}
+{% block page_title %}Users &amp; Roles{% endblock %}
+{% block content %}
+<div class="card-soft">
+  <div class="card-head">
+    <h2>Users ({{ people|length }})</h2>
+    <form method="get" class="d-flex gap-2">
+      <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="Search name or email">
+      <button class="btn btn-soft btn-sm">Search</button>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-soft">
+      <thead><tr><th>Name</th><th>Odoo login</th><th>Role</th><th>Status</th><th>Last login</th><th class="text-end">Action</th></tr></thead>
+      <tbody>
+      {% for p in people %}
+        <tr>
+          <td class="fw-semibold">{{ p.display_name }}</td>
+          <td>{{ p.username }}</td>
+          <td colspan="2">
+            {% if p == user %}
+              <span class="pill tone-red">{{ p.get_role_display }}</span> <span class="small-note">(you)</span>
+            {% else %}
+              <form method="post" action="{% url 'user_update' p.pk %}" class="d-flex gap-2 align-items-center">
+                {% csrf_token %}
+                <select name="role" class="form-select form-select-sm w-auto">
+                  {% for value, label in roles %}<option value="{{ value }}" {% if p.role == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+                <select name="active" class="form-select form-select-sm w-auto">
+                  <option value="1" {% if p.is_active %}selected{% endif %}>Active</option>
+                  <option value="0" {% if not p.is_active %}selected{% endif %}>Disabled</option>
+                </select>
+                <button class="btn btn-outline-primary btn-xs">Save</button>
+              </form>
+            {% endif %}
+          </td>
+          <td class="small">{{ p.last_odoo_login|date:"d-M-Y H:i"|default:"—" }}</td>
+          <td class="text-end small-note">{% if not p.is_active %}<span class="pill tone-gray">Disabled</span>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-center muted py-4">No users yet. People appear here after their first login.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-foot"><span>New people start as <b>User</b> after their first Odoo login. Checkers / Supervisors give final confirmation.</span></div>
+</div>
+{% endblock %}

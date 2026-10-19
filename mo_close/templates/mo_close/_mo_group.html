@@ -1,0 +1,24 @@
+{% load mo_close_tags %}{% with mo=group.mo %}
+<tbody class="mo-group" id="mo-group-{{ mo.pk }}">
+  <tr class="mo-row {% if mo.user_done and mo.system_status != 'confirmed' and not mo.final_confirmed %}row-flag{% endif %}">
+    <td>{{ pl.so_number }}</td>
+    <td class="mono fw-semibold text-nowrap">{{ mo.fg_code }}</td>
+    <td style="min-width: 170px">{{ mo.fg_description }}</td>
+    <td class="text-end fw-semibold">{{ mo.qty|qty }}</td>
+    <td class="ref-cell"><span class="fw-bold">{{ mo.reference }}</span>
+      <div class="small-note">MO qty {{ mo.product_qty|qty }}{% if mo.product_qty != mo.qty %} <i class="bi bi-info-circle" title="MO quantity differs from the packing list quantity"></i>{% endif %}</div></td>
+    <td>{% state_pill mo %}</td>
+    {% include "mo_close/_row_tracking.html" with row=mo kind="mo" %}
+  </tr>
+  {% for tr in group.transfers %}
+  <tr class="tr-row {% if tr.user_done and tr.system_status != 'confirmed' and not tr.final_confirmed %}row-flag{% endif %}">
+    <td colspan="4" class="small-note text-end">{{ tr.type_name|default:"Transfer" }}</td>
+    <td class="ref-cell mono">{{ tr.reference }}</td>
+    <td>{% state_pill tr %}</td>
+    {% include "mo_close/_row_tracking.html" with row=tr kind="transfer" %}
+  </tr>
+  {% empty %}
+  <tr class="tr-row"><td colspan="4"></td><td class="ref-cell small-note" colspan="5">No open transfers</td></tr>
+  {% endfor %}
+</tbody>
+{% endwith %}

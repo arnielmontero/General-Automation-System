@@ -1,0 +1,51 @@
+# General Automation System (SAWO)
+
+A standalone web system for automating SAWO work that is done by hand today. Each automation is its own
+module. The first one is **MO's To Be Close** (System_001).
+
+## MO's To Be Close
+
+Packing list → Odoo Manufacturing Orders → tracked until everything is confirmed done.
+
+| Step | What happens |
+|---|---|
+| 1 | **New Record** named by SO → upload the Odoo packing list PDF → the system separates the information (Sold To, Date, Invoice No., Container No., …) from the list data (External Code, Description, Qty, …) → review → **Save** |
+| 2 | **Generate from Odoo**: MOs whose Source contains the SO, in state Confirmed / In Progress / To Close, matched to the packing list External Codes; each MO's transfers (PC, SFP …) that are not Done are saved |
+| 3 | **Progress**: users tick each MO / transfer row as done → the system checks Odoo right away (Done in Odoo / not) → a **Checker / Supervisor** gives final confirmation (comment required when Odoo does not show Done). Everything is logged. Excel / PDF reports per SO and for all open items |
+
+Process: [docs/system_001/FLOW.md](docs/system_001/FLOW.md) · Design: [docs/system_001/DESIGN.md](docs/system_001/DESIGN.md)
+
+**Login** is with the Odoo account (email + password) of erp.sawo.com. Passwords are never stored. Odoo is only
+read, never changed. Roles (User / Checker / Admin) are set by an Admin under *Users & Roles*; the Odoo login(s)
+in `ADMIN_ODOO_LOGIN` are always Admin.
+
+## Run (Docker)
+
+Runs as its own Docker project `general-automation-system` (web + PostgreSQL), separate from any other
+containers on the PC.
+
+```bash
+cp .env.example .env          # set DJANGO_SECRET_KEY, POSTGRES_PASSWORD, ADMIN_ODOO_LOGIN
+docker compose up -d --build  # migrations run automatically
+```
+
+Open **http://localhost:8085** (or `http://<this-pc-ip>:8085` from other PCs on the network; then add that
+address to `CSRF_TRUSTED_ORIGINS` in `.env` and run `docker compose up -d` again).
+
+| Task | Command |
+|---|---|
+| Logs | `docker compose logs -f web` |
+| Tests | `docker compose run --rm web python manage.py test` |
+| Stop | `docker compose down` (data is kept in the `db_data` and `media` volumes) |
+| Backup database | `docker compose exec db pg_dump -U gas gas > backup.sql` |
+
+## Layout
+
+```
+gas/         Django project settings
+core/        Odoo login, users & roles, audit log, Odoo JSON-RPC client
+mo_close/    System_001 — MO's To Be Close (PDF reader, Odoo sync, tracking, reports)
+templates/   Shared CMS layout
+static/      CSS and the SAWO logo
+docs/        Process, design and reference images
+```

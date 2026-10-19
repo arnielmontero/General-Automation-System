@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}New Record{% endblock %}
+{% block page_kicker %}Step 1 · MO's To Be Close{% endblock %}
+{% block page_title %}New Record{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="card-soft">
+      <div class="card-head"><h2>Record name by SO &amp; upload packing list</h2></div>
+      <form class="card-body-soft" method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger py-2">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold small" for="{{ form.so_number.id_for_label }}">{{ form.so_number.label }}</label>
+          {{ form.so_number }}
+          {% for e in form.so_number.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          <div class="small-note mt-1">The Invoice No. on the packing list, e.g. S04743 (4743 also works).</div>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold small" for="{{ form.pdf.id_for_label }}">{{ form.pdf.label }}</label>
+          {{ form.pdf }}
+          {% for e in form.pdf.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          <div class="small-note mt-1">The packing list PDF printed from Odoo (max 10 MB).</div>
+        </div>
+        <button class="btn btn-primary"><i class="bi bi-upload"></i> Upload &amp; read PDF</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card-soft">
+      <div class="card-head"><h2>What happens next</h2></div>
+      <div class="card-body-soft small">
+        <ol class="mb-0 ps-3">
+          <li class="mb-2">The system reads the PDF and separates the <b>information</b> (Sold To, Date, Invoice No., Container No., …) from the <b>list data</b> (External Code, Description, Qty, …).</li>
+          <li class="mb-2">You review the result. It checks the Invoice No. matches the SO, the rows add up to the Grand Total, and the SO exists in Odoo.</li>
+          <li class="mb-2"><b>Save</b> to keep the record, or <b>Cancel</b>.</li>
+          <li>Then <b>Generate from Odoo</b> on the record to collect its MO's and transfers (Step 2).</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

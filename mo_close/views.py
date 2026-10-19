@@ -1,0 +1,362 @@
+from django.contrib import messages
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
+from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.http import urlencode
+from django.views.decorators.http import require_POST
+
+from core.audit import Section
+from core.models import AuditLog
+from core.odoo import OdooError, OdooSessionExpired, client_for
+from core.permissions import admin_required
+
+from . import exports, services
+from .forms import NewRecordForm
+from .models import SYSTEM, MORecord, PackingList, TransferRecord, norm_code
+from .pdf_parser import PackingListParseError, parse_packing_list
+
+ROW_FILTERS = {
+    "all": "All",
+    "open": "Not marked done",
+    "waiting": "Waiting final confirmation",
+    "flag": "Not confirmed by Odoo",
+    "confirmed": "Confirmed done",
+}
+
+
+def _row_matches(row, f):
+    if f == "open":
+        return not row.user_done
+    if f == "waiting":
+        return row.user_done and not row.final_confirmed
+    if f == "flag":
+        return row.user_done and row.system_status != "confirmed" and not row.final_confirmed
+    if f == "confirmed":
+        return row.final_confirmed
+    return True
+
+
+def _record_logs(pl, limit=None):
+    qs = AuditLog.objects.filter(system=SYSTEM, record_id=pl.pk)
+    return qs[:limit] if limit else qs
+
+
+# --- Dashboard -------------------------------------------------------------------------------
+
+
+def dashboard(request):
+    by_status = dict(PackingList.objects.values_list("status").annotate(n=Count("id")))
+    rows_filter = {"packing_list__status": PackingList.Status.GENERATED}
+    tr_filter = {"mo__packing_list__status": PackingList.Status.GENERATED}
+
+    def count(q):
+        return MORecord.objects.filter(q, **rows_filter).count() + TransferRecord.objects.filter(q, **tr_filter).count()
+
+    kpis = {
+        "records": sum(by_status.values()),
+        "in_progress": by_status.get(PackingList.Status.GENERATED, 0),
+        "to_generate": by_status.get(PackingList.Status.SAVED, 0),
+        "closed": by_status.get(PackingList.Status.CLOSED, 0),
+        "open_rows": count(Q(user_done=False)),
+        "waiting_rows": count(Q(user_done=True, final_confirmed=False)),
+        "flag_rows": count(Q(user_done=True, final_confirmed=False) & ~Q(system_status="confirmed")),
+    }
+    active = list(
+        PackingList.objects.filter(status__in=[PackingList.Status.SAVED, PackingList.Status.GENERATED])
+        .select_related("created_by")
+        .order_by("-generated_at", "-created_at")[:10]
+    )
+    counts = services.progress_counts(active)
+    for pl in active:
+        pl.progress = counts[pl.pk]
+    recent = AuditLog.objects.filter(system=SYSTEM)[:8]
+    return render(request, "mo_close/dashboard.html", {"kpis": kpis, "active": active, "recent": recent})
+
+
+# --- Step 1: records -------------------------------------------------------------------------
+
+
+def records(request):
+    qs = PackingList.objects.select_related("created_by")
+    q = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "")
+    if q:
+        qs = qs.filter(
+            Q(so_number__icontains=q) | Q(sold_to__icontains=q) | Q(container_no__icontains=q) | Q(invoice_no__icontains=q)
+        )
+    if status in PackingList.Status.values:
+        qs = qs.filter(status=status)
+    qs = qs.annotate(line_count=Count("lines")).order_by("-created_at")
+    page = Paginator(qs, 20).get_page(request.GET.get("page"))
+    counts = services.progress_counts(page.object_list)
+    for pl in page.object_list:
+        pl.progress = counts[pl.pk]
+    return render(
+        request,
+        "mo_close/records.html",
+        {
+            "page": page,
+            "q": q,
+            "status": status,
+            "statuses": PackingList.Status.choices,
+            "query": urlencode({"q": q, "status": status}),
+        },
+    )
+
+
+def record_new(request):
+    form = NewRecordForm(request.POST or None, request.FILES or None)
+    if request.method == "POST" and form.is_valid():
+        so = form.cleaned_data["so_number"]
+        upload = form.cleaned_data["pdf"]
+        try:
+            parsed = parse_packing_list(upload)
+        except PackingListParseError as exc:
+            form.add_error("pdf", str(exc))
+        else:
+            upload.seek(0)
+            try:
+                odoo_check = services.so_exists_in_odoo(client_for(request), so)
+            except OdooSessionExpired:
+                raise
+            except OdooError:
+                odoo_check = None
+            pl = services.create_draft(request, so, upload, parsed, odoo_check)
+            return redirect("mo_close:record_preview", pk=pl.pk)
+    return render(request, "mo_close/record_new.html", {"form": form})
+
+
+def record_preview(request, pk):
+    pl = get_object_or_404(PackingList, pk=pk)
+    if pl.status != PackingList.Status.DRAFT:
+        return redirect("mo_close:record_detail", pk=pk)
+    if request.method == "POST":
+        if request.POST.get("action") == "save":
+            services.save_record(request, pl)
+            messages.success(request, f"Record {pl.so_number} saved with {pl.lines.count()} rows.")
+            return redirect("mo_close:record_detail", pk=pk)
+        so = pl.so_number
+        services.discard_draft(request, pl)
+        messages.info(request, f"Upload for {so} cancelled.")
+        return redirect("mo_close:record_new")
+    return render(request, "mo_close/record_preview.html", {"pl": pl, "groups": pl.grouped_lines()})
+
+
+def record_detail(request, pk):
+    pl = get_object_or_404(PackingList.objects.select_related("created_by", "generated_by"), pk=pk)
+    if pl.status == PackingList.Status.DRAFT:
+        return redirect("mo_close:record_preview", pk=pk)
+    f = request.GET.get("f", "all")
+    if f not in ROW_FILTERS:
+        f = "all"
+
+    mos = list(
+        pl.mos.select_related("user_done_by", "final_confirmed_by").prefetch_related(
+            "transfers__user_done_by", "transfers__final_confirmed_by"
+        )
+    )
+    groups = []
+    for mo in mos:
+        transfers = list(mo.transfers.all())
+        shown = [t for t in transfers if _row_matches(t, f)]
+        if _row_matches(mo, f) or shown:
+            groups.append({"mo": mo, "transfers": transfers if f == "all" else shown})
+
+    lines = pl.grouped_lines()
+    matched_codes = {norm_code(mo.fg_code) for mo in mos}
+    unmatched = [g for g in lines if g["norm"] not in matched_codes]
+    counts = services.progress_counts([pl])[pl.pk]
+    return render(
+        request,
+        "mo_close/record_detail.html",
+        {
+            "pl": pl,
+            "groups": groups,
+            "lines": lines,
+            "raw_lines": pl.lines.all(),
+            "unmatched": unmatched if pl.generated_at else [],
+            "progress": counts,
+            "f": f,
+            "filters": ROW_FILTERS,
+            "logs": _record_logs(pl, 200),
+            "tab": request.GET.get("tab", "mos" if pl.generated_at else "lines"),
+        },
+    )
+
+
+def record_pdf(request, pk):
+    pl = get_object_or_404(PackingList, pk=pk)
+    if not pl.pdf:
+        raise Http404
+    return FileResponse(pl.pdf.open("rb"), content_type="application/pdf", filename=pl.pdf_name or f"{pl.so_number}.pdf")
+
+
+@admin_required
+@require_POST
+def record_delete(request, pk):
+    pl = get_object_or_404(PackingList, pk=pk)
+    so = pl.so_number
+    services.delete_record(request, pl)
+    messages.success(request, f"Record {so} deleted.")
+    return redirect("mo_close:records")
+
+
+# --- Step 2: generate / refresh --------------------------------------------------------------
+
+
+@require_POST
+def record_generate(request, pk):
+    pl = get_object_or_404(PackingList, pk=pk)
+    if pl.status == PackingList.Status.DRAFT:
+        messages.error(request, "Save the record before generating.")
+        return redirect("mo_close:record_preview", pk=pk)
+    try:
+        r = services.generate_from_odoo(request, pl, client_for(request))
+    except OdooSessionExpired:
+        raise
+    except OdooError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(
+            request,
+            f"Generated from Odoo: {r.mos_new} new MO(s), {r.transfers_new} new transfer(s); "
+            f"{r.mos_updated} MO(s) and {r.transfers_updated} transfer(s) refreshed.",
+        )
+    return redirect("mo_close:record_detail", pk=pk)
+
+
+@require_POST
+def record_refresh(request, pk):
+    pl = get_object_or_404(PackingList, pk=pk)
+    try:
+        r = services.refresh_from_odoo(request, pl, client_for(request))
+    except OdooSessionExpired:
+        raise
+    except OdooError as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, f"Refreshed from Odoo: {len(r.state_changes)} state change(s).")
+    return redirect("mo_close:record_detail", pk=pk)
+
+
+# --- Step 3: mark done / confirmation ----------------------------------------------------------
+
+
+@require_POST
+def row_action(request, kind, pk, action):
+    if kind not in ("mo", "transfer"):
+        raise Http404
+    try:
+        row = services.get_row(kind, pk)
+    except (MORecord.DoesNotExist, TransferRecord.DoesNotExist):
+        raise Http404
+    error = ""
+    try:
+        if action == "mark":
+            services.mark_done(request, row, client_for(request))
+        elif action == "unmark":
+            services.unmark_done(request, row)
+        elif action == "confirm":
+            services.confirm_final(request, row, request.POST.get("comment", ""))
+        elif action == "unconfirm":
+            services.unconfirm_final(request, row, request.POST.get("comment", ""))
+        else:
+            raise Http404
+    except ValidationError as exc:
+        error = " ".join(exc.messages)
+    except PermissionDenied:
+        error = "Only a Checker / Supervisor can do this."
+
+    mo = row if kind == "mo" else row.mo
+    mo = MORecord.objects.select_related("packing_list", "user_done_by", "final_confirmed_by").get(pk=mo.pk)
+    context = {
+        "group": {"mo": mo, "transfers": list(mo.transfers.select_related("user_done_by", "final_confirmed_by"))},
+        "pl": mo.packing_list,
+        "error": error,
+        "error_kind": kind,
+        "error_pk": pk,
+    }
+    if request.headers.get("HX-Request"):
+        response = render(request, "mo_close/_mo_group.html", context)
+        response["HX-Trigger"] = "progressChanged"
+        return response
+    if error:
+        messages.error(request, error)
+    return redirect("mo_close:record_detail", pk=mo.packing_list_id)
+
+
+def record_progress_badge(request, pk):
+    """Small HTMX fragment: progress summary of one record (refreshed after each row action)."""
+    pl = get_object_or_404(PackingList, pk=pk)
+    return render(
+        request, "mo_close/_progress_summary.html", {"pl": pl, "progress": services.progress_counts([pl])[pl.pk]}
+    )
+
+
+# --- Progress (Step 3 monitoring) -----------------------------------------------------------------
+
+
+def progress(request):
+    show = request.GET.get("show", "open")
+    qs = PackingList.objects.exclude(status=PackingList.Status.DRAFT).select_related("created_by")
+    if show == "open":
+        qs = qs.filter(status__in=[PackingList.Status.SAVED, PackingList.Status.GENERATED])
+    elif show == "closed":
+        qs = qs.filter(status=PackingList.Status.CLOSED)
+    q = request.GET.get("q", "").strip()
+    if q:
+        qs = qs.filter(Q(so_number__icontains=q) | Q(sold_to__icontains=q))
+    qs = qs.order_by("status", "-generated_at", "-created_at")
+    page = Paginator(qs, 20).get_page(request.GET.get("page"))
+    counts = services.progress_counts(page.object_list)
+    for pl in page.object_list:
+        pl.progress = counts[pl.pk]
+    return render(
+        request,
+        "mo_close/progress.html",
+        {"page": page, "show": show, "q": q, "query": urlencode({"show": show, "q": q})},
+    )
+
+
+# --- Exports ----------------------------------------------------------------------------------
+
+
+def _download(content, filename, content_type):
+    response = HttpResponse(content, content_type=content_type)
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def record_export(request, pk, fmt):
+    pl = get_object_or_404(PackingList.objects.select_related("created_by", "generated_by"), pk=pk)
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    if fmt == "xlsx":
+        content, filename, ctype = exports.record_excel(pl), f"MO-To-Be-Close_{pl.so_number}_{stamp}.xlsx", XLSX
+    elif fmt == "pdf":
+        content, filename, ctype = exports.record_pdf(pl), f"MO-To-Be-Close_{pl.so_number}_{stamp}.pdf", "application/pdf"
+    else:
+        raise Http404
+    services.log(request, Section.EXPORT, f"Exported {fmt.upper()}", pl, target=filename)
+    return _download(content, filename, ctype)
+
+
+def progress_export(request, fmt):
+    """All rows not yet confirmed done, across open records."""
+    records = list(
+        PackingList.objects.filter(status=PackingList.Status.GENERATED).order_by("so_number")
+    )
+    stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+    if fmt == "xlsx":
+        content, filename, ctype = exports.open_items_excel(records), f"MO-To-Be-Close_open-items_{stamp}.xlsx", XLSX
+    elif fmt == "pdf":
+        content, filename, ctype = exports.open_items_pdf(records), f"MO-To-Be-Close_open-items_{stamp}.pdf", "application/pdf"
+    else:
+        raise Http404
+    services.audit.log(request, Section.EXPORT, f"Exported open items {fmt.upper()}", system=SYSTEM, target=filename)
+    return _download(content, filename, ctype)

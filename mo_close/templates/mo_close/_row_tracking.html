@@ -1,0 +1,41 @@
+{% load mo_close_tags %}
+{# Step 3 columns for one MO / transfer row. Every action swaps the whole MO group. #}
+<td style="min-width: 120px">
+  <div class="form-check m-0">
+    <input class="form-check-input" type="checkbox" id="done-{{ kind }}-{{ row.pk }}"
+      {% if row.user_done %}checked{% endif %} {% if row.final_confirmed %}disabled{% endif %}
+      hx-post="{% if row.user_done %}{% url 'mo_close:row_action' kind row.pk 'unmark' %}{% else %}{% url 'mo_close:row_action' kind row.pk 'mark' %}{% endif %}"
+      hx-target="#mo-group-{{ mo.pk }}" hx-swap="outerHTML" hx-disabled-elt="this"
+      {% if row.user_done %}hx-confirm="Remove the done mark from {{ row.reference }}?"{% endif %}>
+    <label class="form-check-label small" for="done-{{ kind }}-{{ row.pk }}">Done</label>
+  </div>
+  {% if row.user_done %}<div class="small-note">{{ row.user_done_at|date:"d-M-Y H:i" }}<br>{{ row.user_done_by.display_name }}</div>{% endif %}
+</td>
+<td>
+  {% system_pill row %}
+  {% if row.system_checked_at %}<div class="small-note">{{ row.system_checked_at|date:"d-M-Y H:i" }}</div>{% endif %}
+</td>
+<td style="min-width: 190px">
+  {% if row.final_confirmed %}
+    <span class="pill tone-green"><i class="bi bi-patch-check"></i> Confirmed</span>
+    <div class="small-note">{{ row.final_confirmed_at|date:"d-M-Y H:i" }}<br>{{ row.final_confirmed_by.display_name }}</div>
+    {% if row.final_comment %}<div class="small fst-italic">“{{ row.final_comment }}”</div>{% endif %}
+    {% if user.is_checker %}
+      <button class="btn btn-link btn-sm p-0 small" hx-post="{% url 'mo_close:row_action' kind row.pk 'unconfirm' %}"
+        hx-target="#mo-group-{{ mo.pk }}" hx-swap="outerHTML" hx-confirm="Remove the final confirmation of {{ row.reference }}?">Undo</button>
+    {% endif %}
+  {% elif row.user_done and user.is_checker %}
+    <form class="d-flex flex-column gap-1 align-items-start" hx-post="{% url 'mo_close:row_action' kind row.pk 'confirm' %}"
+      hx-target="#mo-group-{{ mo.pk }}" hx-swap="outerHTML">
+      {% if row.system_status != "confirmed" %}
+        <textarea class="form-control form-control-sm" name="comment" rows="2" placeholder="Comment (required)" title="Odoo does not show Done — explain why you confirm" required></textarea>
+      {% endif %}
+      <button class="btn btn-primary btn-xs text-nowrap"><i class="bi bi-check2"></i> Confirm done</button>
+    </form>
+  {% elif row.user_done %}
+    <span class="pill tone-yellow">Waiting checker</span>
+  {% else %}
+    <span class="muted">—</span>
+  {% endif %}
+  {% if error and error_kind == kind and error_pk == row.pk %}<div class="text-danger small mt-1">{{ error }}</div>{% endif %}
+</td>

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load mo_close_tags %}
+{% block title %}Progress{% endblock %}
+{% block page_kicker %}Step 3 · Monitor until done{% endblock %}
+{% block page_title %}Progress{% endblock %}
+{% block header_actions %}
+  <div class="dropdown">
+    <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Download Report</button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><h6 class="dropdown-header">Open items (not done yet)</h6></li>
+      <li><a class="dropdown-item" href="{% url 'mo_close:progress_export' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel</a></li>
+      <li><a class="dropdown-item" href="{% url 'mo_close:progress_export' 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
+    </ul>
+  </div>
+{% endblock %}
+{% block content %}
+<div class="card-soft">
+  <div class="card-head">
+    <h2>Records ({{ page.paginator.count }})</h2>
+    <form method="get" class="d-flex gap-2 flex-wrap">
+      <div class="btn-group btn-group-sm">
+        <a class="btn {% if show == 'open' %}btn-primary{% else %}btn-soft{% endif %}" href="?show=open&q={{ q|urlencode }}">Open</a>
+        <a class="btn {% if show == 'closed' %}btn-primary{% else %}btn-soft{% endif %}" href="?show=closed&q={{ q|urlencode }}">Closed</a>
+        <a class="btn {% if show == 'all' %}btn-primary{% else %}btn-soft{% endif %}" href="?show=all&q={{ q|urlencode }}">All</a>
+      </div>
+      <input type="hidden" name="show" value="{{ show }}">
+      <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="SO or customer">
+      <button class="btn btn-soft btn-sm">Search</button>
+    </form>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-soft">
+      <thead><tr><th>SO</th><th>Sold To</th><th>Status</th><th class="text-center">Rows</th><th class="text-center">Not marked</th><th class="text-center">Marked done</th><th class="text-center">Done in Odoo</th><th style="min-width:170px">Final confirmed</th><th>Last refresh</th><th class="text-end">Action</th></tr></thead>
+      <tbody>
+      {% for pl in page %}
+        {% with p=pl.progress %}
+        <tr>
+          <td class="fw-semibold">{{ pl.so_number }}</td>
+          <td>{{ pl.sold_to_name|default:"—" }}</td>
+          <td>{% record_pill pl %}</td>
+          <td class="text-center">{{ p.total }}</td>
+          <td class="text-center">{% if p.total %}<a href="{% url 'mo_close:record_detail' pl.pk %}?f=open&tab=mos">{{ p.open }}</a>{% else %}—{% endif %}</td>
+          <td class="text-center">{{ p.marked }}</td>
+          <td class="text-center">{{ p.system }}</td>
+          <td>{% include "mo_close/_progress_bar.html" %}</td>
+          <td class="small text-nowrap">{{ pl.refreshed_at|date:"d-M-Y H:i"|default:"—" }}</td>
+          <td class="text-end"><a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a></td>
+        </tr>
+        {% endwith %}
+      {% empty %}
+        <tr><td colspan="10" class="text-center muted py-4">No records.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-foot">
+    <span>{% if page.paginator.count %}Showing {{ page.start_index }} to {{ page.end_index }} of {{ page.paginator.count }} entries{% endif %}</span>
+    {% include "_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

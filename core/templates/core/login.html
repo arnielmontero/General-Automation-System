@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Log in{% endblock %}
+{% block body %}
+<div class="login-wrap">
+  <div class="card-soft login-card">
+    <div class="text-center mb-4">
+      <img src="{% static 'img/sawo-logo.png' %}" alt="SAWO">
+      <h1 class="h5 fw-bold mt-3 mb-1">MO's To Be Close</h1>
+      <div class="muted small">General Automation System · log in with your Odoo account</div>
+    </div>
+
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} py-2 small">{{ message }}</div>
+    {% endfor %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="mb-3">
+        <label class="form-label small fw-semibold" for="email">Odoo email</label>
+        <input class="form-control" id="email" name="email" type="text" autocomplete="username" value="{{ email }}" required autofocus>
+      </div>
+      <div class="mb-4">
+        <label class="form-label small fw-semibold" for="password">Odoo password</label>
+        <input class="form-control" id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary w-100 py-2" type="submit"><i class="bi bi-box-arrow-in-right me-1"></i> Log in</button>
+    </form>
+    <p class="small-note text-center mt-3 mb-0">Your password is checked by Odoo and is not stored in this system.</p>
+  </div>
+</div>
+{% endblock %}

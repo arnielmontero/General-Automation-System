@@ -1,0 +1,13 @@
+{% if page.paginator.num_pages > 1 %}
+<nav>
+  <ul class="pagination pagination-sm mb-0">
+    {% if page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ query }}&page={{ page.previous_page_number }}"><i class="bi bi-chevron-left"></i></a></li>{% endif %}
+    {% for n in page.paginator.page_range %}
+      {% if n == page.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+      {% elif n == 1 or n == page.paginator.num_pages or n >= page.number|add:-2 and n <= page.number|add:2 %}<li class="page-item"><a class="page-link" href="?{{ query }}&page={{ n }}">{{ n }}</a></li>
+      {% elif n == page.number|add:-3 or n == page.number|add:3 %}<li class="page-item disabled"><span class="page-link">…</span></li>{% endif %}
+    {% endfor %}
+    {% if page.has_next %}<li class="page-item"><a class="page-link" href="?{{ query }}&page={{ page.next_page_number }}"><i class="bi bi-chevron-right"></i></a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}

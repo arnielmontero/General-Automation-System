@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load mo_close_tags %}
+{% block title %}{{ pl.so_number }}{% endblock %}
+{% block page_kicker %}Record · {{ pl.sold_to_name|default:"MO's To Be Close" }}{% endblock %}
+{% block page_title %}{{ pl.so_number }}{% endblock %}
+{% block header_actions %}
+  {% if pl.status != "closed" %}
+    <form method="post" action="{% url 'mo_close:record_generate' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
+      {% csrf_token %}
+      <button class="btn btn-primary btn-sm"><i class="bi bi-cloud-download"></i> {% if pl.generated_at %}Generate again{% else %}Generate from Odoo{% endif %}</button>
+    </form>
+  {% endif %}
+  {% if pl.generated_at %}
+    <form method="post" action="{% url 'mo_close:record_refresh' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
+      {% csrf_token %}
+      <button class="btn btn-soft btn-sm"><i class="bi bi-arrow-repeat"></i> Refresh from Odoo</button>
+    </form>
+  {% endif %}
+  <div class="dropdown">
+    <button class="btn btn-soft btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+    <ul class="dropdown-menu dropdown-menu-end">
+      <li><a class="dropdown-item" href="{% url 'mo_close:record_export' pl.pk 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Excel</a></li>
+      <li><a class="dropdown-item" href="{% url 'mo_close:record_export' pl.pk 'pdf' %}"><i class="bi bi-file-earmark-pdf"></i> PDF</a></li>
+    </ul>
+  </div>
+  {% if user.is_admin %}
+    <form method="post" action="{% url 'mo_close:record_delete' pl.pk %}" onsubmit="return confirm('Delete record {{ pl.so_number }} and all its tracking? This cannot be undone.')">
+      {% csrf_token %}<button class="btn btn-soft btn-sm text-danger" title="Delete record"><i class="bi bi-trash"></i></button>
+    </form>
+  {% endif %}
+{% endblock %}
+{% block content %}
+{% include "mo_close/_progress_summary.html" %}
+
+<ul class="nav nav-tabs mb-0" role="tablist">
+  <li class="nav-item"><button class="nav-link {% if tab == 'mos' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-mos" type="button">MO's &amp; Transfers ({{ progress.total }})</button></li>
+  <li class="nav-item"><button class="nav-link {% if tab == 'lines' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-lines" type="button">Packing List ({{ lines|length }})</button></li>
+  {% if pl.generated_at %}<li class="nav-item"><button class="nav-link {% if tab == 'unmatched' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-unmatched" type="button">No MO found {% if unmatched %}<span class="pill pill-sm tone-red">{{ unmatched|length }}</span>{% endif %}</button></li>{% endif %}
+  <li class="nav-item"><button class="nav-link {% if tab == 'info' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-info" type="button">Information</button></li>
+  <li class="nav-item"><button class="nav-link {% if tab == 'logs' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#tab-logs" type="button">Logs</button></li>
+</ul>
+
+<div class="tab-content">
+  {# --- Step 2 / 3: MO's and transfers --- #}
+  <div class="tab-pane fade {% if tab == 'mos' %}show active{% endif %}" id="tab-mos">
+    <div class="card-soft" style="border-top-left-radius:0">
+      <div class="card-head">
+        <h3>MO's &amp; Transfers {% if pl.refreshed_at %}<span class="small-note fw-normal">· Odoo data as of {{ pl.refreshed_at|date:"d-M-Y H:i" }}</span>{% endif %}</h3>
+        <div class="btn-group btn-group-sm flex-wrap">
+          {% for key, label in filters.items %}
+            <a class="btn {% if f == key %}btn-primary{% else %}btn-soft{% endif %}" href="?f={{ key }}&tab=mos">{{ label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% if not pl.generated_at %}
+        <div class="card-body-soft text-center py-5">
+          <i class="bi bi-cloud-download fs-1 muted"></i>
+          <p class="mt-2 mb-3">Collect this SO's Manufacturing Orders (Confirmed, In Progress, To Close) and their open transfers from Odoo.</p>
+          <form method="post" action="{% url 'mo_close:record_generate' pl.pk %}" onsubmit="this.querySelector('button').disabled=true">
+            {% csrf_token %}<button class="btn btn-primary"><i class="bi bi-cloud-download"></i> Generate from Odoo</button>
+          </form>
+        </div>
+      {% else %}
+        <div class="table-responsive">
+          <table class="table table-soft table-compact">
+            <thead><tr><th>SO#</th><th>FG Code</th><th>FG</th><th class="text-end">Qty</th><th>MO / Transfer</th><th>State</th><th>Marked done</th><th>System check</th><th>Final confirmation</th></tr></thead>
+            {% for group in groups %}
+              {% include "mo_close/_mo_group.html" %}
+            {% empty %}
+              <tbody><tr><td colspan="9" class="text-center muted py-4">
+                {% if f == "all" %}No matching MO's in Confirmed / In Progress / To Close were found in Odoo for {{ pl.so_number }}.{% else %}No rows for this filter.{% endif %}
+              </td></tr></tbody>
+            {% endfor %}
+          </table>
+        </div>
+        <div class="table-foot">
+          <span><span class="pill pill-sm tone-red">red rows</span> = marked done but Odoo does not show Done — a Checker must confirm with a comment.</span>
+          <span>Generated {{ pl.generated_at|date:"d-M-Y H:i" }} by {{ pl.generated_by.display_name|default:"—" }}</span>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# --- Step 1: packing list --- #}
+  <div class="tab-pane fade {% if tab == 'lines' %}show active{% endif %}" id="tab-lines">
+    <div class="card-soft" style="border-top-left-radius:0">
+      <div class="card-head"><h3>List data from the PDF</h3><span class="small-note">Saved {{ pl.saved_at|date:"d-M-Y H:i" }} by {{ pl.created_by.display_name }}</span></div>
+      {% include "mo_close/_lines_tables.html" with groups=lines %}
+    </div>
+  </div>
+
+  {% if pl.generated_at %}
+  <div class="tab-pane fade {% if tab == 'unmatched' %}show active{% endif %}" id="tab-unmatched">
+    <div class="card-soft" style="border-top-left-radius:0">
+      <div class="card-head"><h3>Packing list codes without an MO</h3></div>
+      <div class="card-body-soft small muted pb-0">No MO in Confirmed / In Progress / To Close with this product was found for {{ pl.so_number }}. The MO may already be Done, not created yet, or the item is not manufactured.</div>
+      <div class="table-responsive">
+        <table class="table table-soft">
+          <thead><tr><th>External Code</th><th>Description</th><th class="text-end">Qty</th></tr></thead>
+          <tbody>
+          {% for g in unmatched %}
+            <tr><td class="mono fw-semibold">{{ g.code|default:"(no code)" }}</td><td>{{ g.description }}</td><td class="text-end">{{ g.qty|qty }}</td></tr>
+          {% empty %}
+            <tr><td colspan="3" class="text-center muted py-4">Every packing list code has an MO.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="tab-pane fade {% if tab == 'info' %}show active{% endif %}" id="tab-info">
+    <div class="pt-3">{% include "mo_close/_record_info.html" %}</div>
+  </div>
+
+  <div class="tab-pane fade {% if tab == 'logs' %}show active{% endif %}" id="tab-logs">
+    <div class="card-soft" style="border-top-left-radius:0">
+      <div class="card-head"><h3>Logs</h3><span class="small-note">Everything that happened on this record</span></div>
+      {% include "_log_table.html" with entries=logs show_record=False %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% load mo_close_tags %}
+<div class="row g-3 mb-3" id="progress-summary"
+     hx-get="{% url 'mo_close:record_progress' pl.pk %}" hx-trigger="progressChanged from:body" hx-swap="outerHTML">
+  <div class="col-6 col-lg-3"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-blue"><i class="bi bi-diagram-3"></i></span>{% record_pill pl %}</div>
+    <div class="kpi-label">Rows (MO + transfers)</div><div class="kpi-value">{{ progress.total }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-yellow"><i class="bi bi-check2-square"></i></span></div>
+    <div class="kpi-label">Marked done by users</div><div class="kpi-value">{{ progress.marked }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-purple"><i class="bi bi-cloud-check"></i></span></div>
+    <div class="kpi-label">Done in Odoo (system check)</div><div class="kpi-value">{{ progress.system }}</div></div></div>
+  <div class="col-6 col-lg-3"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-green"><i class="bi bi-patch-check"></i></span><span class="small fw-semibold">{{ progress.percent }}%</span></div>
+    <div class="kpi-label">Final confirmed</div><div class="kpi-value">{{ progress.final }}</div>
+    <div class="progress mt-2"><div class="progress-bar {% if progress.percent == 100 %}bg-done{% endif %}" style="width: {{ progress.percent }}%"></div></div>
+  </div></div>
+</div>

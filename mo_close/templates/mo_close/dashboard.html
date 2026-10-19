@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% load mo_close_tags %}
+{% block title %}Dashboard{% endblock %}
+{% block header_actions %}
+  <a class="btn btn-soft btn-sm" href="{% url 'mo_close:progress_export' 'xlsx' %}"><i class="bi bi-file-earmark-excel"></i> Open items</a>
+  <a class="btn btn-primary btn-sm" href="{% url 'mo_close:record_new' %}"><i class="bi bi-plus-lg"></i> New Record</a>
+{% endblock %}
+{% block content %}
+<div class="row g-3 mb-3">
+  {% with k=kpis %}
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-blue"><i class="bi bi-journal-text"></i></span></div>
+    <div class="kpi-label">Total records</div><div class="kpi-value">{{ k.records }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-orange"><i class="bi bi-gear-wide-connected"></i></span>
+      {% if k.to_generate %}<span class="pill pill-sm tone-blue">{{ k.to_generate }} to generate</span>{% endif %}</div>
+    <div class="kpi-label">In progress</div><div class="kpi-value">{{ k.in_progress }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-gray"><i class="bi bi-hourglass-split"></i></span></div>
+    <div class="kpi-label">Rows not marked done</div><div class="kpi-value">{{ k.open_rows }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-yellow"><i class="bi bi-person-check"></i></span></div>
+    <div class="kpi-label">Waiting final confirmation</div><div class="kpi-value">{{ k.waiting_rows }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-red"><i class="bi bi-exclamation-triangle"></i></span>
+      {% if k.flag_rows %}<span class="pill pill-sm tone-red">Check</span>{% endif %}</div>
+    <div class="kpi-label">Not confirmed by Odoo</div><div class="kpi-value">{{ k.flag_rows }}</div></div></div>
+  <div class="col-6 col-md-4 col-xl-2"><div class="card-soft kpi">
+    <div class="kpi-top"><span class="kpi-icon tone-green"><i class="bi bi-check2-circle"></i></span></div>
+    <div class="kpi-label">Closed records</div><div class="kpi-value">{{ k.closed }}</div></div></div>
+  {% endwith %}
+</div>
+
+<div class="row g-3">
+  <div class="col-xl-8">
+    <div class="card-soft h-100">
+      <div class="card-head">
+        <h2>Records in progress</h2>
+        <a class="btn btn-soft btn-sm" href="{% url 'mo_close:progress' %}">View all</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-soft">
+          <thead><tr><th>SO</th><th>Sold To</th><th>Status</th><th style="min-width:160px">Progress</th><th>Generated</th><th class="text-end">Action</th></tr></thead>
+          <tbody>
+          {% for pl in active %}
+            <tr>
+              <td class="fw-semibold">{{ pl.so_number }}</td>
+              <td>{{ pl.sold_to_name|default:"—" }}</td>
+              <td>{% record_pill pl %}</td>
+              <td>{% include "mo_close/_progress_bar.html" with p=pl.progress %}</td>
+              <td class="small text-nowrap">{{ pl.generated_at|date:"d-M-Y H:i"|default:"—" }}</td>
+              <td class="text-end"><a class="btn btn-outline-primary btn-xs" href="{% url 'mo_close:record_detail' pl.pk %}">Detail</a></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6" class="text-center muted py-4">Nothing in progress. <a href="{% url 'mo_close:record_new' %}">Create a new record</a>.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card-soft h-100">
+      <div class="card-head"><h2>Recent activity</h2></div>
+      <div class="card-body-soft">
+        {% for e in recent %}
+          <div class="d-flex gap-2 mb-3">
+            <span class="avatar">{{ e.user_label|first|upper|default:"?" }}</span>
+            <div class="small">
+              <div><b>{{ e.user_label|default:"System" }}</b> · {{ e.action }}{% if e.target %} <span class="mono">{{ e.target }}</span>{% endif %}</div>
+              <div class="small-note">{% if e.record_id %}<a href="{% url 'mo_close:record_detail' e.record_id %}">{{ e.record_label }}</a> · {% endif %}{{ e.created_at|timesince }} ago</div>
+            </div>
+          </div>
+        {% empty %}
+          <div class="muted small">No activity yet.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

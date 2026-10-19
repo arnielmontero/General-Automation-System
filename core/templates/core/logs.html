@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block page_kicker %}Administration{% endblock %}
+{% block page_title %}Logs{% endblock %}
+{% block content %}
+<div class="card-soft">
+  <div class="card-head">
+    <h2>Activity log ({{ page.paginator.count }})</h2>
+    <form method="get" class="d-flex gap-2 flex-wrap">
+      <select name="section" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+        <option value="">All sections</option>
+        {% for value, label in sections %}<option value="{{ value }}" {% if section == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="Search user, SO, action…">
+      <button class="btn btn-soft btn-sm">Filter</button>
+    </form>
+  </div>
+  {% include "_log_table.html" with entries=page.object_list show_record=True %}
+  <div class="table-foot">
+    <span>Showing {{ page.start_index }} to {{ page.end_index }} of {{ page.paginator.count }} entries</span>
+    {% include "_pagination.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,82 @@
+"""In-memory stand-in for Odoo, based on the S04743 screenshots (PL3/MO/06873 etc.)."""
+
+import copy
+
+from core.odoo import OdooSessionExpired
+
+
+def _match(record, domain):
+    for field, op, value in domain:
+        actual = record.get(field)
+        if op == "=" and actual != value:
+            return False
+        if op == "in" and actual not in value:
+            return False
+        if op == "ilike" and str(value).lower() not in str(actual or "").lower():
+            return False
+    return True
+
+
+class FakeOdoo:
+    def __init__(self):
+        self.calls = []
+        self.expired = False
+        self.data = {
+            "sale.order": [{"id": 1, "name": "S04743"}],
+            "product.product": [
+                {"id": 101, "default_code": "NRNS-60NS-BL-Z-C"},
+                {"id": 102, "default_code": "NRNS-90NS-BL-Z-C"},
+                {"id": 103, "default_code": "OTHER-CODE"},
+            ],
+            "mrp.production": [
+                {"id": 1, "name": "PL3/MO/06873", "product_id": [101, "[NRNS-60NS-BL-Z-C] Nordex S Black 3H.E 6,0kW"],
+                 "product_qty": 30.0, "state": "confirmed", "picking_ids": [201, 202, 203],
+                 "origin": "Heater for S04743 - HOLLAND SAWO 3 - 1500 - target date 12/12/25"},
+                {"id": 2, "name": "PL3/MO/07787", "product_id": [102, "[NRNS-90NS-BL-Z-C] Nordex S Black 3H.E 9,0kW"],
+                 "product_qty": 50.0, "state": "confirmed", "picking_ids": [204],
+                 "origin": "Heater for S04743 - HOLLAND SAWO 3 - 1500 - target date 12/12/25"},
+                {"id": 3, "name": "PL3/MO/09999", "product_id": [103, "[OTHER-CODE] Not on the packing list"],
+                 "product_qty": 5.0, "state": "confirmed", "picking_ids": [],
+                 "origin": "Heater for S04743"},
+                {"id": 4, "name": "PL3/MO/08888", "product_id": [101, "[NRNS-60NS-BL-Z-C] Other SO"],
+                 "product_qty": 5.0, "state": "confirmed", "picking_ids": [],
+                 "origin": "Heater for S047431"},
+                {"id": 5, "name": "PL3/MO/06871", "product_id": [101, "[NRNS-60NS-BL-Z-C] Cancelled one"],
+                 "product_qty": 5.0, "state": "cancel", "picking_ids": [],
+                 "origin": "Heater for S04743"},
+            ],
+            "stock.picking": [
+                {"id": 201, "name": "PL3/SFP/04631", "state": "waiting", "picking_type_id": [7, "PL3: Store Finished Product"],
+                 "scheduled_date": "2025-10-26 08:00:00"},
+                {"id": 202, "name": "PL3/PC/17852", "state": "assigned", "picking_type_id": [8, "PL3: Pick Components"],
+                 "scheduled_date": "2025-10-26 08:00:00"},
+                {"id": 203, "name": "PL3/PC/05565", "state": "done", "picking_type_id": [8, "PL3: Pick Components"],
+                 "scheduled_date": False},
+                {"id": 204, "name": "PL3/PC/17855", "state": "confirmed", "picking_type_id": [8, "PL3: Pick Components"],
+                 "scheduled_date": False},
+            ],
+        }
+
+    def set_state(self, model, odoo_id, state):
+        for rec in self.data[model]:
+            if rec["id"] == odoo_id:
+                rec["state"] = state
+
+    def _check(self, *call):
+        self.calls.append(call)
+        if self.expired:
+            raise OdooSessionExpired("Your Odoo session has expired. Please log in again.")
+
+    def search_read(self, model, domain, fields, order=None, limit=None):
+        self._check("search_read", model, domain)
+        rows = [r for r in self.data[model] if _match(r, domain)]
+        return [{k: copy.deepcopy(r.get(k)) for k in ["id", *fields]} for r in rows]
+
+    def read(self, model, ids, fields):
+        self._check("read", model, ids)
+        ids = set(ids)
+        return [{k: copy.deepcopy(r.get(k)) for k in ["id", *fields]} for r in self.data[model] if r["id"] in ids]
+
+    def search_count(self, model, domain):
+        self._check("search_count", model, domain)
+        return len([r for r in self.data[model] if _match(r, domain)])

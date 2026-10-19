@@ -1,0 +1,21 @@
+<div class="table-responsive">
+  <table class="table table-soft">
+    <thead><tr><th>Date</th><th>User</th><th>Section</th><th>Action</th>{% if show_record %}<th>Record</th>{% endif %}<th>Item</th><th>Change</th><th>Comment</th></tr></thead>
+    <tbody>
+    {% for e in entries %}
+      <tr>
+        <td class="text-nowrap small">{{ e.created_at|date:"d-M-Y H:i:s" }}</td>
+        <td>{{ e.user_label|default:"—" }}</td>
+        <td><span class="pill pill-sm tone-gray">{{ e.get_section_display }}</span></td>
+        <td>{{ e.action }}</td>
+        {% if show_record %}<td>{% if e.record_id and e.system == "mo_close" %}<a href="{% url 'mo_close:record_detail' e.record_id %}">{{ e.record_label }}</a>{% else %}{{ e.record_label|default:"—" }}{% endif %}</td>{% endif %}
+        <td class="mono">{{ e.target|default:"—" }}</td>
+        <td class="small">{% if e.old_value or e.new_value %}{{ e.old_value|default:"—" }} → {{ e.new_value|default:"—" }}{% else %}—{% endif %}</td>
+        <td class="small">{{ e.comment|default:"—"|linebreaksbr }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="8" class="text-center muted py-4">No log entries.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
