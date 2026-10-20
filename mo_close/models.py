@@ -16,6 +16,31 @@ def norm_code(code):
     return re.sub(r"[^A-Z0-9]", "", (code or "").upper())
 
 
+def so_digits(so):
+    """'S08027' → '8027' (the number without the S and leading zeros)."""
+    return str(int(so[1:])) if so[1:].isdigit() else so
+
+
+def so_source_pattern(so):
+    """Finds the SO number in an MO Source however it was typed. The correct form is 'S0…' (S08027);
+    SO8027, So8027, SS08027, S8027, O8027, 08027, 'SO# 08027' and a bare 8027 are auto-corrected to it — but
+    never S080271, PO8027, a number that is part of a date / time (10/16/2026, 2026-08-07), or a bare number in
+    parentheses, which in SAWO Sources is the customer code (UKRAINE(4300), Sauna Europe (11500))."""
+    sep = r"[\s#.:-]*"
+    number = re.escape(so_digits(so))
+    prefixed = r"(?<![A-Za-z0-9])(?:S{1,2}" + sep + r"[O0]?|[O0])" + sep + r"0*" + number + r"(?!\d)"
+    bare = r"(?<![A-Za-z0-9/.:(-])0*" + number + r"(?![\d/)]|[.:-]\d)"
+    return re.compile(prefixed + "|" + bare, re.IGNORECASE)
+
+
+def so_source_fix(so, source):
+    """The wrong spelling of the SO in an MO Source ('SO8027'), or '' when it is written correctly."""
+    found = [m.group(0) for m in so_source_pattern(so).finditer(source or "")]
+    if not found or so in found:
+        return ""
+    return found[0]
+
+
 class PackingList(models.Model):
     """One record per Sales Order, created from an uploaded packing list PDF (Step 1)."""
 
@@ -193,9 +218,11 @@ class TrackedRow(models.Model):
 
 
 class MORecord(TrackedRow):
-    """A Manufacturing Order matched to a packing line (Step 2)."""
+    """A Manufacturing Order of the SO (Step 2): matched to a packing line, or — when its product is not on
+    the packing list — a component / sub-assembly made for the SO (fg_* then hold the MO's product)."""
 
     packing_list = models.ForeignKey(PackingList, on_delete=models.CASCADE, related_name="mos")
+    on_packing_list = models.BooleanField(default=True)
     fg_code = models.CharField("FG Code", max_length=100)
     fg_description = models.CharField("FG", max_length=500, blank=True)
     qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -207,11 +234,16 @@ class MORecord(TrackedRow):
     KIND = "mo"
 
     class Meta:
-        ordering = ["fg_code", "reference"]
+        ordering = ["-on_packing_list", "fg_code", "reference"]
         constraints = [models.UniqueConstraint(fields=["packing_list", "odoo_id"], name="uniq_mo_per_record")]
 
     def __str__(self):
         return self.reference
+
+    @property
+    def source_fix(self):
+        """Fix flag: the SO is written wrong in the Odoo Source (e.g. 'SO8027' instead of 'S08027')."""
+        return so_source_fix(self.packing_list.so_number, self.origin)
 
 
 class TransferRecord(TrackedRow):

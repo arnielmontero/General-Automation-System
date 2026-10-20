@@ -3,10 +3,12 @@
   <tr class="mo-row {% if mo.user_done and mo.system_status != 'confirmed' and not mo.final_confirmed %}row-flag{% endif %}">
     <td>{{ pl.so_number }}</td>
     <td class="mono fw-semibold text-nowrap">{{ mo.fg_code }}</td>
-    <td style="min-width: 170px">{{ mo.fg_description }}</td>
-    <td class="text-end fw-semibold">{{ mo.qty|qty }}</td>
+    <td style="min-width: 170px">{{ mo.fg_description }}{% if not mo.on_packing_list %}
+      <div><span class="pill pill-sm tone-purple" title="Made for {{ pl.so_number }} (MO Source), but this product is not on the packing list">Component · not on packing list</span></div>{% endif %}</td>
+    <td class="text-end fw-semibold">{% if mo.on_packing_list %}{{ mo.qty|qty }}{% else %}—{% endif %}</td>
     <td class="ref-cell"><span class="fw-bold">{{ mo.reference }}</span>
-      <div class="small-note">MO qty {{ mo.product_qty|qty }}{% if mo.product_qty != mo.qty %} <i class="bi bi-info-circle" title="MO quantity differs from the packing list quantity"></i>{% endif %}</div></td>
+      <div class="small-note">MO qty {{ mo.product_qty|qty }}{% if mo.on_packing_list and mo.product_qty != mo.qty %} <i class="bi bi-info-circle" title="MO quantity differs from the packing list quantity"></i>{% endif %}</div>{% with fix=mo.source_fix %}{% if fix %}
+      <div><span class="pill pill-sm tone-orange" title="Odoo Source: {{ mo.origin }} — the SO should be written {{ pl.so_number }}. Please correct the Source in Odoo.">Source fix: {{ fix }} → {{ pl.so_number }}</span></div>{% endif %}{% endwith %}</td>
     <td>{% state_pill mo %}</td>
     {% include "mo_close/_row_tracking.html" with row=mo kind="mo" %}
   </tr>

@@ -63,14 +63,20 @@
           </form>{% else %}<p class="small-note mb-0">Your role does not include Generate from Odoo.</p>{% endif %}
         </div>
       {% else %}
+        {% if source_fixes %}<div class="card-body-soft small pb-0"><span class="pill pill-sm tone-orange">Source fix</span>
+          {{ source_fixes|length }} MO{{ source_fixes|length|pluralize }} {{ source_fixes|length|pluralize:"has,have" }} the SO written wrong in the Odoo Source ({% for mo in source_fixes %}{{ mo.reference }}: <span class="mono">{{ mo.source_fix }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}).
+          The system auto-corrected {{ source_fixes|length|pluralize:"it,them" }} to <span class="mono fw-semibold">{{ pl.so_number }}</span> — please correct the Source in Odoo.</div>{% endif %}
         <div class="table-responsive">
           <table class="table table-soft table-compact">
             <thead><tr><th>SO#</th><th>FG Code</th><th>FG</th><th class="text-end">Qty</th><th>MO / Transfer</th><th>State</th><th>Marked done</th><th>System check</th><th>Final confirmation</th></tr></thead>
             {% for group in groups %}
+              {% ifchanged group.mo.on_packing_list %}{% if not group.mo.on_packing_list %}
+                <tbody><tr><td colspan="9" class="fw-semibold pt-3">Components / sub-assemblies <span class="small-note fw-normal">— MOs made for {{ pl.so_number }} whose product is not on the packing list</span></td></tr></tbody>
+              {% endif %}{% endifchanged %}
               {% include "mo_close/_mo_group.html" %}
             {% empty %}
               <tbody><tr><td colspan="9" class="text-center muted py-4">
-                {% if f == "all" %}No matching MO's in Confirmed / In Progress / To Close were found in Odoo for {{ pl.so_number }}.{% else %}No rows for this filter.{% endif %}
+                {% if f == "all" %}No MO's in Confirmed / In Progress / To Close with {{ pl.so_number }} in their Source were found in Odoo — they may all be Done already.{% else %}No rows for this filter.{% endif %}
               </td></tr></tbody>
             {% endfor %}
           </table>

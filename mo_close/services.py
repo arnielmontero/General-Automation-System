@@ -14,7 +14,16 @@ from django.utils.dateparse import parse_datetime
 from core import audit
 from core.odoo import MO_STATES, PICKING_STATES, OdooAccessError, OdooError, OdooSessionExpired
 
-from .models import SYSTEM, MORecord, PackingLine, PackingList, TransferRecord, norm_code
+from .models import (
+    SYSTEM,
+    MORecord,
+    PackingLine,
+    PackingList,
+    TransferRecord,
+    norm_code,
+    so_digits,
+    so_source_pattern,
+)
 from .pdf_parser import parse_date
 
 Section = audit.Section
@@ -147,11 +156,6 @@ class GenerateResult:
     state_changes: list = field(default_factory=list)
 
 
-def _so_in_source(so):
-    # Match the whole SO number inside the MO Source ("Heater for S04743 - HOLLAND …"), not S047431.
-    return re.compile(r"(?<![A-Za-z0-9])" + re.escape(so) + r"(?!\d)", re.IGNORECASE)
-
-
 def _m2o(value):
     """Odoo many2one [id, "name"] → (id, name)."""
     if isinstance(value, (list, tuple)) and value:
@@ -181,32 +185,39 @@ def _set_state(row, new_state, now, result, labels):
 
 
 def generate_from_odoo(request, pl, client):
-    """Step 2: find the SO's MOs (Confirmed / In Progress / To Close) matching the packing list codes,
-    save them with their transfers that are not Done. Running it again refreshes Odoo values and adds
-    anything new, keeping every tick, confirmation and comment."""
+    """Step 2: find the SO's MOs (Confirmed / In Progress / To Close) and save them with their transfers
+    that are not Done. MOs whose product is on the packing list are matched to its line; MOs for other
+    products (components / sub-assemblies made for the SO) are saved too, flagged as not on the packing
+    list. Running it again refreshes Odoo values and adds anything new, keeping every tick, confirmation
+    and comment."""
     now = timezone.now()
     result = GenerateResult()
     groups = {g["norm"]: g for g in pl.grouped_lines() if g["norm"]}
 
+    # Search the number only (the Source may say S08027, SO8027 …), then keep whole-SO matches.
     mos = client.search_read(
         "mrp.production",
-        [("origin", "ilike", pl.so_number), ("state", "in", list(REQUIRED_MO_STATES))],
+        [("origin", "ilike", so_digits(pl.so_number)), ("state", "in", list(REQUIRED_MO_STATES))],
         MO_FIELDS,
         order="name",
     )
-    pattern = _so_in_source(pl.so_number)
+    pattern = so_source_pattern(pl.so_number)
     mos = [m for m in mos if pattern.search(m.get("origin") or "")]
 
     product_ids = {_m2o(m["product_id"])[0] for m in mos} - {None}
-    codes = {p["id"]: p.get("default_code") or "" for p in client.read("product.product", product_ids, ["default_code"])}
+    products = {p["id"]: p for p in client.read("product.product", product_ids, ["default_code", "name"])}
 
     with transaction.atomic():
         matched = []  # (MORecord, picking ids)
         for m in mos:
             product_id, product_label = _m2o(m["product_id"])
-            group = groups.get(norm_code(codes.get(product_id, "")))
-            if group is None:
-                continue  # MO of this SO for a product that is not on this packing list
+            product = products.get(product_id) or {}
+            code = product.get("default_code") or ""
+            group = groups.get(norm_code(code))
+            on_packing_list = group is not None
+            if not on_packing_list:
+                # MO of this SO for a product that is not on the packing list (component / sub-assembly).
+                group = {"code": code or "(no code)", "description": product.get("name") or product_label, "qty": 0}
             rec = pl.mos.filter(odoo_id=m["id"]).first()
             if rec is None:
                 rec = MORecord(packing_list=pl, odoo_id=m["id"], state=m["state"])
@@ -216,8 +227,9 @@ def generate_from_odoo(request, pl, client):
                 _set_state(rec, m["state"], now, result, MO_STATES)
             rec.reference = m["name"]
             rec.state = m["state"]
-            rec.fg_code = group["code"]
-            rec.fg_description = group["description"]
+            rec.on_packing_list = on_packing_list
+            rec.fg_code = group["code"][:100]
+            rec.fg_description = group["description"][:500]
             rec.qty = group["qty"]
             rec.product_qty = Decimal(str(m.get("product_qty") or 0))
             rec.product_label = product_label[:500]

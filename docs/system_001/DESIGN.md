@@ -103,14 +103,25 @@ The system stores the code as printed and matches Odoo ignoring spaces/dashes.
 
 Button **Generate from Odoo** on a saved record:
 
-1. Search Manufacturing Orders where **Source contains the SO** (`S04743`) and **State is Confirmed, In Progress
-   or To Close**.
+1. Search Manufacturing Orders where **Source contains the SO** and **State is Confirmed, In Progress
+   or To Close**. The correct form is **`S0…`** (`S08027`). Wrong spellings in the Source — `SO8027`, `So8027`,
+   `SS08027`, `S8027`, `O8027`, `08027`, `SO# 08027`, and a bare `8027` with no S0 — are **auto-corrected** (still matched) and the MO gets a **fix flag**
+   *Source fix: SO8027 → S08027* (also a *Source Fix* column in Excel) so the Source can be corrected in Odoo.
+   Never matched as part of another number or a date / time (`S080271`, `PO8027`, `10/16/2026`, `2026-08-07`),
+   nor a bare number in parentheses — that is the customer code (`UKRAINE(4300)`, `Sauna Europe (11500)`).
+   A bare number that is really a customer code written without parentheses (`UKRAINE 4300`) can still be
+   picked up; the fix flag makes such rows visible.
 2. For each grouped packing line, match MOs whose product **Internal Reference = External Code**.
    Every matching MO in those states is saved.
-3. For each matched MO, read its **Transfers** and save those **not Done** (and not Cancelled):
+3. MOs of the SO whose product is **not on the packing list** (components / sub-assemblies made for the SO,
+   e.g. `PL1/MO/34770-002` Plastic Backing for S08027) are saved too, flagged *Component · not on packing
+   list*. They are tracked like any other MO and must also be confirmed before the record closes
+   (decision 2026-10-20).
+4. For each saved MO, read its **Transfers** and save those **not Done** (and not Cancelled):
    Reference + Status.
-4. **Result view**: SO# · FG Code · FG · Qty · MO · State, with each MO's transfers (Reference · Status)
-   listed under it. Lines with **no matching MO** are listed separately as *No MO found*.
+5. **Result view**: SO# · FG Code · FG · Qty · MO · State, with each MO's transfers (Reference · Status)
+   listed under it; component MOs follow in their own group. Lines with **no matching MO** are listed
+   separately as *No MO found*.
 
 Generate can be run again; it refreshes Odoo values but **keeps** user ticks, confirmations and comments.
 

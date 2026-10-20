@@ -37,6 +37,7 @@ ROW_COLUMNS = [
     ("Confirmed By", 18),
     ("Confirmed Date", 17),
     ("Comment", 36),
+    ("Source Fix", 20),
 ]
 
 STAGE_FILL = {
@@ -86,8 +87,9 @@ def record_rows(pl, only_open=False):
                     "values": [
                         pl.so_number,
                         mo.fg_code,
-                        mo.fg_description if is_mo else "",
-                        _num(mo.qty) if is_mo else None,
+                        (mo.fg_description if mo.on_packing_list else f"{mo.fg_description} (component — not on packing list)")
+                        if is_mo else "",
+                        _num(mo.qty) if is_mo and mo.on_packing_list else None,
                         "MO" if is_mo else (row.type_code or "Transfer"),
                         row.reference,
                         row.state_label,
@@ -100,6 +102,7 @@ def record_rows(pl, only_open=False):
                         _who(row.final_confirmed_by),
                         _dt(row.final_confirmed_at),
                         row.final_comment,
+                        f"{mo.source_fix} → {pl.so_number}" if is_mo and mo.source_fix else "",
                     ],
                 }
             )

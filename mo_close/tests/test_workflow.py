@@ -140,9 +140,18 @@ class WorkflowTests(TestCase):
         pl = self.save_and_generate()
         self.assertEqual(pl.status, PackingList.Status.GENERATED)
         mos = {m.reference: m for m in pl.mos.all()}
-        self.assertEqual(set(mos), {"PL3/MO/06873", "PL3/MO/07787"})  # other product / other SO / cancelled excluded
+        # Other SO (S047431, PO4743 / S47430) and cancelled excluded; components of the SO included.
+        self.assertEqual(set(mos), {"PL3/MO/06873", "PL3/MO/07787", "PL3/MO/09999", "PL1/MO/34770-002"})
         mo = mos["PL3/MO/06873"]
+        self.assertTrue(mo.on_packing_list)
         self.assertEqual((mo.fg_code, int(mo.qty), int(mo.product_qty), mo.state_label), ("NRNS-60NS-BL-Z-C", 10, 30, "Confirmed"))
+        comp = mos["PL1/MO/34770-002"]  # Source says "SO4743", product not on the packing list
+        self.assertFalse(comp.on_packing_list)
+        self.assertEqual((comp.fg_code, comp.fg_description, int(comp.qty), comp.state_label),
+                         ("2INN-IH23-001", "Plastic Backing - Rectangular Innova Classic V2.0", 0, "In Progress"))
+        self.assertEqual([t.reference for t in comp.transfers.all()], ["PL1/SFP/16273"])
+        self.assertEqual((comp.source_fix, mo.source_fix), ("SO4743", ""))  # fix flag only on the wrong Source
+        self.assertEqual([m.reference for m in pl.mos.all()][-2:], ["PL1/MO/34770-002", "PL3/MO/09999"])  # components last
         transfers = {t.reference: t.state_label for t in mo.transfers.all()}
         self.assertEqual(transfers, {"PL3/SFP/04631": "Waiting Another Operation", "PL3/PC/17852": "Ready"})  # Done skipped
         self.assertEqual(mos["PL3/MO/07787"].transfers.get().type_code, "PC")
@@ -150,6 +159,35 @@ class WorkflowTests(TestCase):
         resp = self.client.get(reverse("mo_close:record_detail", args=[pl.pk]))
         self.assertContains(resp, "PL3/SFP/04631")
         self.assertContains(resp, "NRNF-105NS-BL-Z")  # in "No MO found"
+        self.assertContains(resp, "Component · not on packing list")
+        self.assertContains(resp, "Source fix: SO4743 → S04743")
+        self.assertContains(resp, "PL1/SFP/16273")
+
+    def test_so_in_source_spellings_and_fix_flag(self):
+        from mo_close.models import so_source_fix, so_source_pattern
+
+        pattern = so_source_pattern("S08027")
+        for text in ["S08027 - SAWO", "CU for SO8027 -Sawo", "MS for So8027", "S8027", "O8027", "08027", "SO# 08027",
+                     "SO 8027", "(S08027)", "s08027", "SS08027-UKRAINE", "8027", "CU for 8027 - Sawo"]:
+            self.assertTrue(pattern.search(text), text)
+        for text in ["S080271", "S08028", "PO8027", "ABS08027", "S18027", "108027", "80271", "8/8027", "8027/26",
+                     "1.8027", "8027.5", "12:8027", "2026-8027", "8027-12", "SSS08027"]:
+            self.assertFalse(pattern.search(text), text)
+        # A bare number in parentheses is the customer code: UKRAINE(4300) is not SO S04300.
+        self.assertFalse(so_source_pattern("S04300").search("SS06092-UKRAINE(4300) Quality pass"))
+        self.assertFalse(so_source_pattern("S11500").search("Sauna Europe (11500)"))
+        # A year inside a date is not SO S02026.
+        self.assertFalse(so_source_pattern("S02026").search("Target Date = 10/16/2026"))
+        self.assertFalse(so_source_pattern("S02026").search("2026-10-16 03:21"))
+        # Fix flag: anything but the exact "S08027" is flagged; correct Sources are not.
+        self.assertEqual(so_source_fix("S08027", "S08027 - SAWO SAUNA EUROPE"), "")
+        self.assertEqual(so_source_fix("S08027", "CU for SO8027 -Sawo"), "SO8027")
+        self.assertEqual(so_source_fix("S08027", "CU for So8027"), "So8027")
+        self.assertEqual(so_source_fix("S08027", "S8027"), "S8027")
+        self.assertEqual(so_source_fix("S08027", "for 08027"), "08027")
+        self.assertEqual(so_source_fix("S08027", "s08027"), "s08027")
+        self.assertEqual(so_source_fix("S08027", "CU for 8027 - Sawo"), "8027")
+        self.assertEqual(so_source_fix("S08027", "SS08027-UKRAINE"), "SS08027")
 
     def test_step2_generate_again_keeps_tracking(self):
         pl = self.save_and_generate()
@@ -160,7 +198,7 @@ class WorkflowTests(TestCase):
         mo.refresh_from_db()
         self.assertTrue(mo.user_done)
         self.assertEqual(TransferRecord.objects.get(reference="PL3/SFP/04631").state, "assigned")
-        self.assertEqual(MORecord.objects.count(), 2)
+        self.assertEqual(MORecord.objects.count(), 4)
         self.assertTrue(AuditLog.objects.filter(action="Odoo state changed", target="PL3/SFP/04631").exists())
 
     # --- Step 3 ---
@@ -193,11 +231,11 @@ class WorkflowTests(TestCase):
 
     def test_step3_done_in_odoo_then_record_closes(self):
         pl = self.save_and_generate()
-        for model, ids in (("mrp.production", [1, 2]), ("stock.picking", [201, 202, 204])):
+        for model, ids in (("mrp.production", [1, 2, 3, 6]), ("stock.picking", [201, 202, 204, 205])):
             for i in ids:
                 self.odoo.set_state(model, i, "done")
         rows = pl.all_rows()
-        self.assertEqual(len(rows), 5)
+        self.assertEqual(len(rows), 8)  # component MOs (not on the packing list) must be closed too
         for row in rows:
             self.act(row, "mark")
         self.client.force_login(self.checker)
@@ -273,10 +311,10 @@ class WorkflowTests(TestCase):
 
         data = reports.build(reports.ReportFilters.from_query({"preset": "all"}))
         k = data["kpis"]
-        self.assertEqual((k["records"], k["in_progress"], k["not_generated"], k["rows"], k["mos"], k["transfers"]), (2, 1, 1, 5, 2, 3))
-        self.assertEqual((k["marked"], k["odoo_done"], k["final"], k["percent"]), (2, 1, 1, 20))
-        self.assertEqual({s["key"]: s["value"] for s in data["stages"]}, {"open": 3, "waiting": 0, "flag": 1, "confirmed": 1})
-        self.assertEqual({s["key"]: s["value"] for s in data["mo_states"]}["confirmed"], 2)
+        self.assertEqual((k["records"], k["in_progress"], k["not_generated"], k["rows"], k["mos"], k["transfers"]), (2, 1, 1, 8, 4, 4))
+        self.assertEqual((k["marked"], k["odoo_done"], k["final"], k["percent"]), (2, 1, 1, 12))
+        self.assertEqual({s["key"]: s["value"] for s in data["stages"]}, {"open": 6, "waiting": 0, "flag": 1, "confirmed": 1})
+        self.assertEqual({s["key"]: s["value"] for s in data["mo_states"]}["confirmed"], 3)
         self.assertEqual(sum(p["records"] for p in data["periods"]), 2)
         self.assertEqual(sum(p["confirmations"] for p in data["periods"]), 1)
 

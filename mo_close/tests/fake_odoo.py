@@ -24,9 +24,10 @@ class FakeOdoo:
         self.data = {
             "sale.order": [{"id": 1, "name": "S04743"}],
             "product.product": [
-                {"id": 101, "default_code": "NRNS-60NS-BL-Z-C"},
-                {"id": 102, "default_code": "NRNS-90NS-BL-Z-C"},
-                {"id": 103, "default_code": "OTHER-CODE"},
+                {"id": 101, "default_code": "NRNS-60NS-BL-Z-C", "name": "Nordex S Black 3H.E 6,0kW"},
+                {"id": 102, "default_code": "NRNS-90NS-BL-Z-C", "name": "Nordex S Black 3H.E 9,0kW"},
+                {"id": 103, "default_code": "OTHER-CODE", "name": "Not on the packing list"},
+                {"id": 104, "default_code": "2INN-IH23-001", "name": "Plastic Backing - Rectangular Innova Classic V2.0"},
             ],
             "mrp.production": [
                 {"id": 1, "name": "PL3/MO/06873", "product_id": [101, "[NRNS-60NS-BL-Z-C] Nordex S Black 3H.E 6,0kW"],
@@ -44,6 +45,13 @@ class FakeOdoo:
                 {"id": 5, "name": "PL3/MO/06871", "product_id": [101, "[NRNS-60NS-BL-Z-C] Cancelled one"],
                  "product_qty": 5.0, "state": "cancel", "picking_ids": [],
                  "origin": "Heater for S04743"},
+                # Component MO whose Source spells the SO as "SO4743" (like PL1/MO/34770-002 for SO8027).
+                {"id": 6, "name": "PL1/MO/34770-002", "product_id": [104, "[2INN-IH23-001] Plastic Backing"],
+                 "product_qty": 1732.0, "state": "progress", "picking_ids": [205],
+                 "origin": "SO4743 -Sawo Sauna Europe B.V. - 11500 -TARGET 8/7/26 (for Container 13)"},
+                {"id": 7, "name": "PL1/MO/34999", "product_id": [104, "[2INN-IH23-001] Other number"],
+                 "product_qty": 1.0, "state": "confirmed", "picking_ids": [],
+                 "origin": "PO4743 / S47430"},
             ],
             "stock.picking": [
                 {"id": 201, "name": "PL3/SFP/04631", "state": "waiting", "picking_type_id": [7, "PL3: Store Finished Product"],
@@ -54,6 +62,8 @@ class FakeOdoo:
                  "scheduled_date": False},
                 {"id": 204, "name": "PL3/PC/17855", "state": "confirmed", "picking_type_id": [8, "PL3: Pick Components"],
                  "scheduled_date": False},
+                {"id": 205, "name": "PL1/SFP/16273", "state": "waiting", "picking_type_id": [9, "PL1: Store Finished Product"],
+                 "scheduled_date": "2026-07-31 08:00:00"},
             ],
         }
 

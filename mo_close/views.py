@@ -172,7 +172,7 @@ def record_detail(request, pk):
             groups.append({"mo": mo, "transfers": transfers if f == "all" else shown})
 
     lines = pl.grouped_lines()
-    matched_codes = {norm_code(mo.fg_code) for mo in mos}
+    matched_codes = {norm_code(mo.fg_code) for mo in mos if mo.on_packing_list}
     unmatched = [g for g in lines if g["norm"] not in matched_codes]
     counts = services.progress_counts([pl])[pl.pk]
     return render(
@@ -184,6 +184,7 @@ def record_detail(request, pk):
             "lines": lines,
             "raw_lines": pl.lines.all(),
             "unmatched": unmatched if pl.generated_at else [],
+            "source_fixes": [mo for mo in mos if mo.source_fix],
             "progress": counts,
             "f": f,
             "filters": ROW_FILTERS,
